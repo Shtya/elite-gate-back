@@ -1,0 +1,472 @@
+{
+  "info": {
+    "_postman_id": "b1f1e3e0-0000-4000-9000-traffic-module-demo",
+    "name": "Traffic Module",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Traffic - Partners",
+      "item": [
+        {
+          "name": "Create Partner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Test Partner\",\n  \"kind\": \"external\",\n  \"platform\": \"facebook\",\n  \"campaignId\": 1,\n  \"baseShareUrl\": \"https://frontend.example.com/landing\",\n  \"utm\": {\n    \"utm_source\": \"facebook\",\n    \"utm_campaign\": \"summer_campaign\",\n    \"utm_content\": \"banner_1\"\n  },\n  \"email\": \"partner@example.com\",\n  \"passwordHash\": \"PlainPassword123!\",\n  \"visitRewardAmount\": 5,\n  \"registrationRewardAmount\": 20,\n  \"appointmentRewardAmount\": 50,\n  \"purchaseSharePercent\": 2.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/traffic/partners",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "partners"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Build Share URL for Partner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"baseShareUrl\": \"https://frontend.example.com/landing\",\n  \"utm\": {\n    \"utm_source\": \"facebook\",\n    \"utm_campaign\": \"summer_campaign\",\n    \"utm_content\": \"banner_1\"\n  }\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/traffic/partners/:id/share-url",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "partners",
+                ":id",
+                "share-url"
+              ]
+            },
+            "description": "Replace :id with partner id"
+          },
+          "response": []
+        },
+        {
+          "name": "Get Partner Performance",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{url}}/traffic/partners/:id/performance?startDate={{startDate}}&endDate={{endDate}}",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "partners",
+                ":id",
+                "performance"
+              ],
+              "query": [
+                {
+                  "key": "startDate",
+                  "value": "{{startDate}}"
+                },
+                {
+                  "key": "endDate",
+                  "value": "{{endDate}}"
+                }
+              ]
+            },
+            "description": "Replace :id with partner id. startDate/endDate should be ISO dates."
+          },
+          "response": []
+        },
+        {
+          "name": "List Partners",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{url}}/traffic/partners?page={{page}}&limit={{limit}}&q={{q}}&isActive={{isActive}}&campaignId={{campaignId}}",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "partners"
+              ],
+              "query": [
+                {
+                  "key": "page",
+                  "value": "{{page}}"
+                },
+                {
+                  "key": "limit",
+                  "value": "{{limit}}"
+                },
+                {
+                  "key": "q",
+                  "value": "{{q}}"
+                },
+                {
+                  "key": "isActive",
+                  "value": "{{isActive}}"
+                },
+                {
+                  "key": "campaignId",
+                  "value": "{{campaignId}}"
+                }
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Get Partner By Id",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{url}}/traffic/partners/:id",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "partners",
+                ":id"
+              ]
+            },
+            "description": "Replace :id (note: service.ensurePartner uses user.id for lookup)."
+          },
+          "response": []
+        },
+        {
+          "name": "Update Partner",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Updated Partner Name\",\n  \"kind\": \"internal\",\n  \"platform\": \"instagram\",\n  \"campaignId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/traffic/partners/:id",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "partners",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Delete Partner",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "url": {
+              "raw": "{{url}}/traffic/partners/:id",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "partners",
+                ":id"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Adjust Partner Balance",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 100\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/traffic/partners/:id/balance",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "partners",
+                ":id",
+                "balance"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Withdraw For Partner",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"amount\": 50\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/traffic/partners/:id/withdraw",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "partners",
+                ":id",
+                "withdraw"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Traffic - Tracking",
+      "item": [
+        {
+          "name": "Track Visitor",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"visitedUrl\": \"https://frontend.example.com/landing?ref=ABC123\",\n  \"landingPage\": \"/landing\",\n  \"referralCode\": \"ABC123\",\n  \"campaignId\": 1,\n  \"utmSource\": \"facebook\",\n  \"utmCampaign\": \"summer_campaign\",\n  \"utmContent\": \"banner_1\",\n  \"userAgent\": \"PostmanRuntime/7.35.0\",\n  \"ipAddress\": \"127.0.0.1\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/traffic/track",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "track"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "Traffic - Conversions",
+      "item": [
+        {
+          "name": "Create Conversion (by visitorId)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "x-ref",
+                "value": "ABC123",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"registration\",\n  \"visitorId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/traffic/conversions",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "conversions"
+              ]
+            }
+          },
+          "response": []
+        },
+        {
+          "name": "Create Conversion (by referralCode)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{token}}",
+                "type": "text"
+              },
+              {
+                "key": "x-ref",
+                "value": "ABC123",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"type\": \"appointment\",\n  \"referralCode\": \"ABC123\",\n  \"campaignId\": 1\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{url}}/traffic/conversions",
+              "host": [
+                "{{url}}"
+              ],
+              "path": [
+                "traffic",
+                "conversions"
+              ]
+            }
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "url",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "token",
+      "value": ""
+    },
+    {
+      "key": "page",
+      "value": "1"
+    },
+    {
+      "key": "limit",
+      "value": "20"
+    },
+    {
+      "key": "q",
+      "value": ""
+    },
+    {
+      "key": "isActive",
+      "value": ""
+    },
+    {
+      "key": "campaignId",
+      "value": ""
+    },
+    {
+      "key": "startDate",
+      "value": ""
+    },
+    {
+      "key": "endDate",
+      "value": ""
+    }
+  ]
+}
