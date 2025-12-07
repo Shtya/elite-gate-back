@@ -115,7 +115,7 @@ export class AppointmentsService {
       // Create agent appointment request
       const request = this.agentAppointmentRequestRepository.create({
         appointment: savedAppointment,
-        agent: agent, 
+        agent: agent.user, 
         // Use agent.user (User entity) not agent (Agent entity)
         status: AppointmentStatus.PENDING,
       });

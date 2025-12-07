@@ -20,7 +20,15 @@ export class AppointmentsController {
   @Roles(UserType.CUSTOMER, UserType.ADMIN, UserType.AGENT)
   create(@Body() createAppointmentDto: CreateAppointmentDto,@Req() req: RequestWithUser) {
     const userId = Number(req.user.id);
-    createAppointmentDto.customerId = userId;
+    if(req.user.type === UserType.ADMIN){
+      if(!createAppointmentDto.customerId){
+        throw new Error("Customer ID is required when admin creates an appointment.");
+      }
+    }
+    else{
+      createAppointmentDto.customerId = userId;
+
+    }
     return this.appointmentsService.create(createAppointmentDto);
   }
 
