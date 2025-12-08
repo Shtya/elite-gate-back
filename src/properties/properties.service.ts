@@ -22,55 +22,59 @@ export class PropertiesService {
   ) {}
 
   async create(createPropertyDto: CreatePropertyDto): Promise<Property> {
-    const propertyType = await this.propertyTypeRepository.findOne({
-      where: { id: createPropertyDto.propertyTypeId },
-    });
-    if (!propertyType) {
-      throw new NotFoundException('Property type not found');
-    }
-
-    const city = await this.cityRepository.findOne({
-      where: { id: createPropertyDto.cityId },
-    });
-    if (!city) {
-      throw new NotFoundException('City not found');
-    }
-
-    const area = await this.areaRepository.findOne({
-      where: { id: createPropertyDto.areaId },
-    });
-    if (!area) {
-      throw new NotFoundException('Area not found');
-    }
-
-    const property = await this.propertiesRepository.create({
+    const { propertyTypeId, cityId, areaId } = createPropertyDto;
+  
+    // Run all FK lookups in parallel (Huge improvement)
+    const [propertyType, city, area] = await Promise.all([
+      this.propertyTypeRepository.findOne({ where: { id: propertyTypeId } }),
+      this.cityRepository.findOne({ where: { id: cityId } }),
+      this.areaRepository.findOne({ where: { id: areaId } }),
+    ]);
+  
+    if (!propertyType) throw new NotFoundException('Property type not found');
+    if (!city) throw new NotFoundException('City not found');
+    if (!area) throw new NotFoundException('Area not found');
+  
+    const property = this.propertiesRepository.create({
       ...createPropertyDto,
       propertyType,
       city,
       area,
-      createdBy: { id: 1 } as User, // This should come from authenticated user
+      createdBy: { id: 1 } as User,
     });
-
-    // Notification for admin about a new property
-    await this.notificationsService.notifyUserType(UserType.ADMIN, {
-      type: NotificationType.SYSTEM,
-      title: 'New Property Added',
-      message: `A new property has been added: ${property.title}`,
-      relatedId: property.id,
-      channel: NotificationChannel.IN_APP,
-    });
-
-    // Notification for quality team
-    await this.notificationsService.notifyUserType(UserType.QUALITY, {
-      type: NotificationType.SYSTEM,
-      title: 'New Property Pending Review',
-      message: `The property "${property.title}" has been added and requires a quality review.`,
-      relatedId: property.id,
-      channel: NotificationChannel.IN_APP,
-    });
-
-    return this.propertiesRepository.save(property);
+  
+    // Save property BEFORE notifications
+    const savedProperty = await this.propertiesRepository.save(property);
+  
+    // Run notifications in background (non-blocking)
+    this.sendNotificationsAsync(savedProperty).catch((err) =>
+      console.error('Notification error:', err),
+    );
+  
+    return savedProperty;
   }
+  
+  // background notifications
+  private async sendNotificationsAsync(property: Property) {
+    await Promise.all([
+      this.notificationsService.notifyUserType(UserType.ADMIN, {
+        type: NotificationType.SYSTEM,
+        title: 'New Property Added',
+        message: `A new property has been added: ${property.title}`,
+        relatedId: property.id,
+        channel: NotificationChannel.IN_APP,
+      }),
+  
+      this.notificationsService.notifyUserType(UserType.QUALITY, {
+        type: NotificationType.SYSTEM,
+        title: 'New Property Pending Review',
+        message: `The property "${property.title}" has been added and requires a quality review.`,
+        relatedId: property.id,
+        channel: NotificationChannel.IN_APP,
+      }),
+    ]);
+  }
+  
 
   async findOne(id: number): Promise<Property> {
     const property = await this.propertiesRepository.findOne({

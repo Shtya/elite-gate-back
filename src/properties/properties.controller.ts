@@ -52,7 +52,7 @@ export class PropertiesController {
       await this.propertiesService.addManyMedia(property.id, uploadedMedias);
     }
 
-    return this.propertiesService.findOne(property.id);
+    return property;
   }
 
   @Get()

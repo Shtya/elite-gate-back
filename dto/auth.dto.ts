@@ -47,7 +47,8 @@ export class RegisterDto {
   
   @IsOptional()
   residencyDocument?: string;
-@Optional()
+
+@IsOptional()
 @Type(() => Number) 
 @IsNumber()
 visitAmount?:number
