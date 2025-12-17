@@ -4,8 +4,9 @@ import { CreatePropertyDto, UpdatePropertyDto, PropertyQueryDto, PropertyMediaDt
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserType } from 'entities/global.entity';
-import { CRUD } from 'common/crud.service';
+
+import { UserType } from '../../entities/global.entity';
+import { CRUD } from '../../common/crud.service';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { mixedUploadOptions } from './uplaod.config';
 
@@ -44,7 +45,7 @@ export class PropertiesController {
         const basePath = isImage ? '/uploads/images/' : '/uploads/videos/';
         return {
           mediaUrl: `${basePath}${file.filename}`,
-          isPrimary: i === 0, 
+          isPrimary: i === 0,
           orderIndex: i,
         };
       });
@@ -58,7 +59,7 @@ export class PropertiesController {
   @Get()
   findAll(@Query() query: any) {
     const filters: Record<string, any> = {};
-  
+
     // equality filters
     if (query.cityId) filters.city = { id: Number(query.cityId) };
     if (query.areaId) filters.area = { id: Number(query.areaId) };
@@ -67,25 +68,25 @@ export class PropertiesController {
       if (query.isActive === 'true') filters.isActive = true;
       else if (query.isActive === 'false') filters.isActive = false;
     }
-  
+
     return CRUD.findAll(
-      this.propertiesService.propertiesRepository, 
-      'property', 
-      query.q || query.search, 
-      query.page,       query.limit, 
-      query.sortBy ?? 'createdAt', 
+      this.propertiesService.propertiesRepository,
+      'property',
+      query.q || query.search,
+      query.page,       query.limit,
+      query.sortBy ?? 'createdAt',
       query.sortOrder ?? 'DESC',
-      ['propertyType', 'city', 'area', 'createdBy', 'medias'], 
+      ['propertyType', 'city', 'area', 'createdBy', 'medias'],
       ['title', 'description', 'price'],
       filters,
-      { 
+      {
         priceMin: query.priceMin ? Number(query.priceMin) : undefined,
         priceMax: query.priceMax ? Number(query.priceMax) : undefined,
         type: query.type || undefined,
       },
     );
   }
-  
+
 
   @Get(':id')
   findOne(@Param('id') id: string) {
@@ -102,7 +103,7 @@ export class PropertiesController {
   ) {
     const propertyId = +id;
     const updated = await this.propertiesService.update(propertyId, updatePropertyDto);
-  
+
     if (files && files.length > 0) {
       // handle new media uploads
       const uploadedMedias = files.map((file, i) => {
@@ -114,13 +115,13 @@ export class PropertiesController {
           orderIndex: i,
         };
       });
-  
+
       await this.propertiesService.addManyMedia(propertyId, uploadedMedias);
     }
-  
+
     return this.propertiesService.findOne(propertyId);
   }
-  
+
   @Delete(':id')
   @UseGuards(JwtAuthGuard)
   @Roles(UserType.ADMIN, UserType.AGENT)

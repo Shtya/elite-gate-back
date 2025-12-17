@@ -38,7 +38,7 @@ export class TimelineService {
     return this.timelineEventsRepository.save(timelineEvent);
   }
 
- 
+
 
   async logAppointmentStatusChange(appointmentId: number, oldStatus: string, newStatus: string, notes?: string): Promise<CustomerTimelineEvent> {
     const appointment = await this.appointmentsRepository.findOne({

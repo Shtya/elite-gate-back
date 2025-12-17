@@ -1,15 +1,51 @@
-import { Injectable } from '@nestjs/common';
+
+import { Injectable, Logger } from '@nestjs/common';
 import * as nodemailer from 'nodemailer';
 
 @Injectable()
 export class MailService {
-  public transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS,
-    },
-  });
+  private readonly logger = new Logger(MailService.name);
+  public transporter: nodemailer.Transporter;
+
+  constructor() {
+    this.initializeTransporter();
+  }
+
+  private initializeTransporter() {
+    const emailUser = process.env.EMAIL_USER;
+    const emailPass = process.env.EMAIL_PASS;
+
+    if (!emailUser || !emailPass) {
+      this.logger.warn('⚠️ Email credentials not found. Email service will be disabled.');
+      this.logger.warn('📝 Please set EMAIL_USER and EMAIL_PASS environment variables');
+      // Create a mock transporter that logs instead of sending
+      this.transporter = {
+        sendMail: async (options: any) => {
+          this.logger.log(`📧 Mock email would be sent to: ${options.to}`);
+          this.logger.log(`📝 Subject: ${options.subject}`);
+          this.logger.log(`📄 Content length: ${options.html?.length || 0} characters`);
+          return { messageId: 'mock-message-id' };
+        },
+        verify: async () => true,
+      } as any;
+      return;
+    }
+
+    try {
+      this.transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: emailUser,
+          pass: emailPass,
+        },
+      });
+
+      this.logger.log('✅ Email service initialized successfully');
+    } catch (error) {
+      this.logger.error('❌ Failed to initialize email service:', error);
+      throw new Error(`Email service initialization failed: ${error.message}`);
+    }
+  }
 
   async sendOtpEmail(
     userEmail: string,
@@ -130,8 +166,8 @@ export class MailService {
                 border-radius: 8px;
             }
             .english { border-right: 4px solid #1e328b; }
-            .arabic { 
-                border-left: 4px solid #2c5aa0; 
+            .arabic {
+                border-left: 4px solid #2c5aa0;
                 text-align: right;
                 direction: rtl;
             }
@@ -148,16 +184,16 @@ export class MailService {
                 <div class="logo">🏠 Real Estate Platform - منصة العقارات</div>
                 <h1>Welcome to Our Family - مرحباً بك في عائلتنا</h1>
             </div>
-            
+
             <!-- English Section -->
             <div class="language-section english">
                 <div class="section-title">English</div>
                 <div class="welcome-text">
                     Hello ${data.userName} 👋
                 </div>
-                
+
                 <p>We're delighted to have you on board! Your account as a <strong>${data.userType}</strong> has been successfully activated.</p>
-                
+
                 <div class="user-info">
                     <strong>Your Account Details:</strong><br>
                     - Email: ${userEmail}<br>
@@ -195,9 +231,9 @@ export class MailService {
                 <div class="welcome-text">
                     مرحباً ${data.userName} 👋
                 </div>
-                
+
                 <p>يسرنا انضمامك إلينا! تم تفعيل حسابك كـ <strong>${this.getArabicUserType(data.userType)}</strong> بنجاح.</p>
-                
+
                 <div class="user-info">
                     <strong>تفاصيل حسابك:</strong><br>
                     - البريد الإلكتروني: ${userEmail}<br>
@@ -343,8 +379,8 @@ export class MailService {
                 border-radius: 8px;
             }
             .english { border-right: 4px solid #1e328b; }
-            .arabic { 
-                border-left: 4px solid #2c5aa0; 
+            .arabic {
+                border-left: 4px solid #2c5aa0;
                 text-align: right;
                 direction: rtl;
             }
@@ -356,53 +392,53 @@ export class MailService {
                 <h1>🏠 Real Estate Platform - منصة العقارات</h1>
                 <p>Secure Verification Code - رمز التحقق الآمن</p>
             </div>
-            
+
             <!-- English Section -->
             <div class="language-section english">
                 <p>Dear <strong>${data.userName}</strong>,</p>
-                
+
                 <div class="purpose-badge">
                     ${purposeText[data.purpose].en}
                 </div>
-                
+
                 <p>Please use the verification code below to complete your request:</p>
-                
+
                 <div class="otp-code">
                     ${data.otp}
                 </div>
-                
+
                 <div class="warning">
                     ⚠️ <strong>Important:</strong><br>
                     This code is valid for 10 minutes only.<br>
                     Do not share this code with anyone.
                 </div>
-                
+
                 <p>If you did not request this code, please ignore this message.</p>
             </div>
 
             <!-- Arabic Section -->
             <div class="language-section arabic">
                 <p>عزيزي <strong>${data.userName}</strong>,</p>
-                
+
                 <div class="purpose-badge">
                     ${purposeText[data.purpose].ar}
                 </div>
-                
+
                 <p>يرجى استخدام رمز التحقق أدناه لإكمال طلبك:</p>
-                
+
                 <div class="otp-code">
                     ${data.otp}
                 </div>
-                
+
                 <div class="warning">
                     ⚠️ <strong>مهم:</strong><br>
                     هذا الرمز صالح لمدة 10 دقائق فقط.<br>
                     لا تشارك هذا الرمز مع أي شخص.
                 </div>
-                
+
                 <p>إذا لم تطلب هذا الرمز، يرجى تجاهل هذه الرسالة.</p>
             </div>
-            
+
             <div class="footer">
                 <p>Best regards,<br>The Real Estate Platform Team 🏠</p>
                 <p>مع أطيب التحيات,<br>فريق منصة العقارات 🏠</p>
@@ -471,8 +507,8 @@ export class MailService {
           border-radius: 8px;
         }
         .english { border-right: 4px solid #1e328b; }
-        .arabic { 
-          border-left: 4px solid #2c5aa0; 
+        .arabic {
+          border-left: 4px solid #2c5aa0;
           text-align: right;
           direction: rtl;
         }
@@ -483,7 +519,7 @@ export class MailService {
         <div class="header">
           <h1>🏠 Listing Approved - تم الموافقة على القائمة</h1>
         </div>
-        
+
         <!-- English Section -->
         <div class="language-section english">
           <p>Dear <strong>${data.userName}</strong>,</p>
@@ -564,8 +600,8 @@ export class MailService {
           border-radius: 8px;
         }
         .english { border-right: 4px solid #a83232; }
-        .arabic { 
-          border-left: 4px solid #c94b4b; 
+        .arabic {
+          border-left: 4px solid #c94b4b;
           text-align: right;
           direction: rtl;
         }
@@ -576,7 +612,7 @@ export class MailService {
         <div class="header">
           <h1>❌ Listing Request Rejected - تم رفض طلب القائمة</h1>
         </div>
-        
+
         <!-- English Section -->
         <div class="language-section english">
           <p>Dear <strong>${data.userName}</strong>,</p>
@@ -662,8 +698,8 @@ export class MailService {
           border-radius: 8px;
         }
         .english { border-right: 4px solid #1e8b42; }
-        .arabic { 
-          border-left: 4px solid #2ca04e; 
+        .arabic {
+          border-left: 4px solid #2ca04e;
           text-align: right;
           direction: rtl;
         }
@@ -674,7 +710,7 @@ export class MailService {
         <div class="header">
           <h1>✅ Listing Published Successfully - تم نشر القائمة بنجاح</h1>
         </div>
-        
+
         <!-- English Section -->
         <div class="language-section english">
           <p>Dear <strong>${data.userName}</strong>,</p>
