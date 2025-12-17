@@ -30,9 +30,10 @@ import {
   VerifyPhoneOtpDto,
   ResetPasswordPhoneDto,
 } from "../../dto/auth.dto";
-import { MailService } from "common/nodemailer";
+
+import { MailService } from "../../common/nodemailer";
 import * as bcrypt from "bcryptjs";
-import { NotificationsService } from "src/notifications/notifications.service";
+import { NotificationsService } from "../notifications/notifications.service";
 
 // SMS Service for phone number OTP
 // @Injectable()
@@ -73,7 +74,7 @@ import { NotificationsService } from "src/notifications/notifications.service";
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger("AuthService");
-  
+
   constructor(
     @InjectRepository(User)
     private usersRepository: Repository<User>,
@@ -98,7 +99,7 @@ export class AuthService {
 
     // Check for existing users
     const existingUser = await this.findUserByIdentifier(
-      registerDto.email, 
+      registerDto.email,
       registerDto.phoneNumber
     );
 
@@ -131,7 +132,7 @@ export class AuthService {
     }
 
     // Create user with phone number (password is optional for phone registration)
-    const passwordHash = registerDto.password 
+    const passwordHash = registerDto.password
       ? await bcrypt.hash(registerDto.password, 12)
       : null;
 
@@ -156,8 +157,8 @@ export class AuthService {
    * Send OTP for phone login/registration
    */
   async sendPhoneOtp(phoneNumber: string): Promise<{ message: string }> {
-    const user = await this.usersRepository.findOne({ 
-      where: { phoneNumber } 
+    const user = await this.usersRepository.findOne({
+      where: { phoneNumber }
     });
 
     if (!user) {
@@ -170,12 +171,12 @@ export class AuthService {
     return { message: "Verification code sent to your phone" };
   }
 
- 
+
   async verifyPhoneOtp(
     verifyPhoneOtpDto: VerifyPhoneOtpDto
   ): Promise<{ accessToken: string; refreshToken: string; user: any }> {
-    const user = await this.usersRepository.findOne({ 
-      where: { phoneNumber: verifyPhoneOtpDto.phoneNumber } 
+    const user = await this.usersRepository.findOne({
+      where: { phoneNumber: verifyPhoneOtpDto.phoneNumber }
     });
 
     if (!user) {
@@ -195,7 +196,7 @@ export class AuthService {
     // Clear OTP
     user.phoneOtp = null;
     user.phoneOtpExpiresAt = null;
-    
+
     // Mark as verified if not already
     if (user.verificationStatus !== VerificationStatus.VERIFIED) {
       user.verificationStatus = VerificationStatus.VERIFIED;
@@ -237,12 +238,12 @@ export class AuthService {
     let user: User;
 
     if (verifyOtpDto.email) {
-      user = await this.usersRepository.findOne({ 
-        where: { email: verifyOtpDto.email } 
+      user = await this.usersRepository.findOne({
+        where: { email: verifyOtpDto.email }
       });
     } else if (verifyOtpDto.phoneNumber) {
-      user = await this.usersRepository.findOne({ 
-        where: { phoneNumber: verifyOtpDto.phoneNumber } 
+      user = await this.usersRepository.findOne({
+        where: { phoneNumber: verifyOtpDto.phoneNumber }
       });
     } else {
       throw new BadRequestException("Either email or phone number is required");
@@ -253,7 +254,7 @@ export class AuthService {
     }
 
     // Check both email and phone OTP
-    const isEmailOtpValid = verifyOtpDto.email && 
+    const isEmailOtpValid = verifyOtpDto.email &&
       user.emailOtp === verifyOtpDto.otp &&
       user.emailOtpExpiresAt &&
       user.emailOtpExpiresAt > new Date();
@@ -312,12 +313,12 @@ export class AuthService {
     let user: User;
 
     if (loginDto.email) {
-      user = await this.usersRepository.findOne({ 
-        where: { email: loginDto.email } 
+      user = await this.usersRepository.findOne({
+        where: { email: loginDto.email }
       });
     } else if (loginDto.phoneNumber) {
-      user = await this.usersRepository.findOne({ 
-        where: { phoneNumber: loginDto.phoneNumber } 
+      user = await this.usersRepository.findOne({
+        where: { phoneNumber: loginDto.phoneNumber }
       });
     } else {
       throw new BadRequestException("Either email or phone number is required");
@@ -417,20 +418,20 @@ export class AuthService {
    */
   async resendOtp(email: string): Promise<{ message: string }> {
     const user = await this.usersRepository.findOne({ where: { email } });
-  
+
     if (!user) {
       throw new NotFoundException("No account found with this email");
     }
-  
+
     if (user.verificationStatus === VerificationStatus.VERIFIED) {
       throw new ConflictException("This email is already verified");
     }
-  
+
     const otp = this.generateOtp();
     user.emailOtp = otp;
     user.emailOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
     await this.usersRepository.save(user);
-  
+
     try {
       await this.mailService.sendOtpEmail(user.email, {
         otp,
@@ -441,7 +442,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(`Failed to resend OTP email to ${user.email}:`, error);
     }
-  
+
     return { message: "A new OTP has been sent to your email. Please verify your account." };
   }
 
@@ -449,8 +450,8 @@ export class AuthService {
    * Resend OTP for phone verification
    */
   async resendPhoneOtp(phoneNumber: string): Promise<{ message: string }> {
-    const user = await this.usersRepository.findOne({ 
-      where: { phoneNumber } 
+    const user = await this.usersRepository.findOne({
+      where: { phoneNumber }
     });
 
     if (!user) {
@@ -489,7 +490,7 @@ export class AuthService {
   private async handleResendOtp(user: User): Promise<{ message: string }> {
     const otp = this.generateOtp();
     let message = "A new OTP has been sent";
-    
+
     if (user.email) {
       user.emailOtp = otp;
       user.emailOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -505,7 +506,7 @@ export class AuthService {
         this.logger.error(`Failed to resend OTP email to ${user.email}:`, error);
       }
     }
-    
+
     if (user.phoneNumber) {
       user.phoneOtp = otp;
       user.phoneOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
@@ -603,7 +604,7 @@ export class AuthService {
    */
   // private async sendPhoneOtp(phoneNumber: string, otp: string, purpose: string): Promise<void> {
   //   const message = `Your verification code is: ${otp}. This code will expire in 10 minutes.`;
-    
+
   //   try {
   //     // Try WhatsApp first if available, otherwise fall back to SMS
   //     // TODO: You might want to make this configurable based on user preference
@@ -611,7 +612,7 @@ export class AuthService {
   //     this.logger.log(`WhatsApp OTP sent to ${phoneNumber}`);
   //   } catch (whatsappError) {
   //     this.logger.warn(`WhatsApp failed for ${phoneNumber}, falling back to SMS:`, whatsappError);
-      
+
   //     // Fall back to SMS
   //     try {
   //       await this.smsService.sendSms(phoneNumber, message);
@@ -790,20 +791,20 @@ export class AuthService {
   }
   async forgotPasswordByPhone(phoneNumber: string): Promise<{ message: string }> {
     const user = await this.usersRepository.findOne({ where: { phoneNumber } });
-  
+
     // Always return same message for security
     if (!user) {
       return { message: "If this phone number exists, a reset code has been sent" };
     }
-  
+
     const otp = this.generateOtp();
     user.resetOtp = otp;
     user.resetOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
     await this.usersRepository.save(user);
-  
+
     // Send SMS/WhatsApp if you want, for now just log
     this.logger.log(`📱 Password reset OTP for ${user.phoneNumber}: ${otp}`);
-  
+
     return { message: "If this phone number exists, a reset code has been sent" };
   }
   async resetPasswordByPhone({
@@ -815,7 +816,7 @@ export class AuthService {
     if (!user) {
       throw new UnauthorizedException("User not found");
     }
-    
+
     if (!user.resetOtp) {
       throw new UnauthorizedException("Reset code not generated");
     }
@@ -824,7 +825,7 @@ export class AuthService {
     if (user.resetOtp !== otp) {
       throw new UnauthorizedException("Invalid reset code");
     }
-    
+
     if (!user.resetOtpExpiresAt || user.resetOtpExpiresAt < new Date()) {
       throw new UnauthorizedException("Reset code expired");
     }
@@ -832,8 +833,8 @@ export class AuthService {
     user.resetOtp = null;
     user.resetOtpExpiresAt = null;
     await this.usersRepository.save(user);
-  
+
     return { message: "Password reset successfully" };
   }
-  
+
 }

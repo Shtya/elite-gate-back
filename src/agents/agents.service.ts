@@ -1,11 +1,13 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
-import { Agent, AgentAppointmentRequest, AgentApprovalStatus, AgentBalance, AgentPayment, Appointment, AppointmentStatus, Area, City, CustomerReview, NotificationChannel, NotificationType, PaymentStatus, User, UserType, VerificationStatus, WalletTransaction } from 'entities/global.entity';
+
+import { Agent, AgentAppointmentRequest, AgentApprovalStatus, AgentBalance, AgentPayment, Appointment, AppointmentStatus, Area, City, CustomerReview, NotificationChannel, NotificationType, PaymentStatus, User, UserType, VerificationStatus, WalletTransaction } from '../../entities/global.entity';
 import { CreateAgentDto, UpdateAgentDto, ApproveAgentDto, AgentQueryDto } from '../../dto/agents.dto';
-import { NotificationsService } from 'src/notifications/notifications.service';
+
+import { NotificationsService } from '../notifications/notifications.service';
 import * as bcrypt from 'bcryptjs';
-import { RegisterDto } from 'dto/auth.dto';
+import { RegisterDto } from '../../dto/auth.dto';
 
 @Injectable()
 export class AgentsService {
@@ -29,7 +31,7 @@ export class AgentsService {
     private areaRepository: Repository<Area>,
     @InjectRepository(AgentAppointmentRequest)
     private agentAppointmentRepository: Repository<AgentAppointmentRequest>,
-  
+
     @InjectRepository(WalletTransaction)
     private walletTransactionRepository: Repository<WalletTransaction>,
     private notificationsService: NotificationsService,
@@ -37,66 +39,66 @@ export class AgentsService {
   private async resolveCityAndAreaSelection(cityIds: any[], areaIds: any[]) {
     let cities: City[];
     let areas: Area[] = [];
-  
+
     const allCities = await this.cityRepository.find({
       relations: ['areas'],
     });
-  
+
     if (cityIds.includes("all")) {
       cities = allCities;
       areas = allCities.flatMap(c => c.areas);
       return { cities, areas };
     }
-  
+
     cityIds = cityIds.map(Number);
-  
+
     cities = await this.cityRepository.find({
       where: cityIds.map(id => ({ id })),
       relations: ['areas']
     });
-  
+
     if (!cities.length) {
       throw new BadRequestException("Invalid cityIds");
     }
-  
+
     if (cities.length > 1) {
       areas = cities.flatMap(c => c.areas);
       return { cities, areas };
     }
-  
+
     const city = cities[0];
-  
+
     if (areaIds?.includes("all")) {
       areas = city.areas;
       return { cities, areas };
     }
-  
+
     areaIds = areaIds?.map(Number) ?? [];
     areas = await this.areaRepository.findByIds(areaIds);
-  
+
     return { cities, areas };
   }
-  
+
   async create(createAgentDto: CreateAgentDto, byAdmin: boolean): Promise<Agent> {
     const existingAgent = await this.agentsRepository.findOne({
       where: { user: { id: createAgentDto.userId } },
     });
-  
+
     if (existingAgent) {
       throw new ConflictException("Agent application already exists for this user");
     }
-  
+
     const user = await this.usersRepository.findOne({
       where: { id: createAgentDto.userId },
     });
     if (!user) throw new NotFoundException("User not found");
-  
+
     // use resolver here
     const { cities, areas } = await this.resolveCityAndAreaSelection(
       createAgentDto.cityIds,
       createAgentDto.areaIds ?? []
     );
-  
+
     const agent = this.agentsRepository.create({
       user,
       cities,
@@ -105,10 +107,10 @@ export class AgentsService {
       residencyDocumentUrl: createAgentDto.residencyDocument,
       status: byAdmin ? AgentApprovalStatus.APPROVED : AgentApprovalStatus.PENDING,
     });
-  
+
     user.userType = byAdmin ? UserType.AGENT : UserType.CUSTOMER;
     await user.save();
-  
+
     if (!byAdmin) {
       await this.notificationsService.notifyUserType(UserType.ADMIN, {
         type: NotificationType.SYSTEM,
@@ -117,12 +119,12 @@ export class AgentsService {
         channel: NotificationChannel.IN_APP,
       });
     }
-  
+
     return this.agentsRepository.save(agent);
   }
-  
-  
-  
+
+
+
 
   async findAll(query: AgentQueryDto): Promise<{ data: Agent[]; total: number }> {
     const { status, cityId, page = 1, limit = 10 } = query;
@@ -148,11 +150,11 @@ export class AgentsService {
       where: { id },
       relations: ['user', 'cities', 'areas', 'updatedBy'],
     });
-  
+
     if (!agent) {
       throw new NotFoundException('Agent not found');
     }
-  
+
     // Run all counts in parallel
     const [
       appointmentAccepted,
@@ -187,7 +189,7 @@ export class AgentsService {
         agent: { id },
       }),
     ]);
-  
+
     return {
       agent,
       stats: {
@@ -200,30 +202,30 @@ export class AgentsService {
       },
     };
   }
-  
+
   async update(id: number, dto: UpdateAgentDto): Promise<Agent> {
     const agent = await this.findOne(id);
-  
+
     if (!dto.cityIds && !dto.areaIds) {
       Object.assign(agent, dto);
       return this.agentsRepository.save(agent);
     }
-  
+
     // use resolver here
     const { cities, areas } = await this.resolveCityAndAreaSelection(
       dto.cityIds ?? agent.cities.map(c => c.id),
       dto.areaIds ?? agent.areas.map(a => a.id)
     );
-  
+
     agent.cities = cities;
     agent.areas = areas;
-  
+
     Object.assign(agent, dto);
-  
+
     return this.agentsRepository.save(agent);
   }
-  
-  
+
+
   async remove(id: number): Promise<void> {
     const agent = await this.findOne(id);
     await this.agentsRepository.remove(agent);
@@ -267,11 +269,11 @@ export class AgentsService {
       where: { user: { id: agentId } },
       relations: ['user', 'earnings', 'payments', 'walletTransactions']
     });
-  
+
     if (!agent) {
       throw new NotFoundException('Agent not found');
     }
-  
+
     // Run all queries in parallel for better performance
     const [
       totalAppointments,
@@ -286,14 +288,14 @@ export class AgentsService {
       this.appointmentRepo.count({
         where: { agent: { id: agent.id } },
       }),
-  
+
       // Recent reviews
       this.reviewRepo.find({
         where: { agentId: agent.id },
         order: { createdAt: 'DESC' },
         take: 5,
       }),
-  
+
       // Recent appointments
       this.appointmentRepo.find({
         where: { agent: { id: agent.id } },
@@ -301,29 +303,29 @@ export class AgentsService {
         take: 5,
         relations: ['customer', 'property'],
       }),
-  
+
       // Recent payments
       this.paymentRepo.find({
         where: { agent: { id: agent.id } },
         order: { createdAt: 'DESC' },
         take: 5,
       }),
-  
+
       // Appointment statistics
       this.getAppointmentStats(agent.id),
-  
+
       // Wallet statistics
       this.getWalletStats(agent),
-  
+
       // Payout history with pagination
       this.getPayoutHistory(agent.id, page, limit, filters)
     ]);
-  
+
     // Calculate average rating
-    const averageRating = reviews.length > 0 
-      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length 
+    const averageRating = reviews.length > 0
+      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
       : 0;
-  
+
     return {
       agent: {
         id: agent.id,
@@ -339,7 +341,7 @@ export class AgentsService {
         totalTransactions: agent.totalTransactions,
         lastPayoutDate: agent.lastPayoutDate,
       },
-      
+
       overview: {
         totalAppointments,
         averageRating,
@@ -348,41 +350,41 @@ export class AgentsService {
         totalEarned: agent.totalEarned,
         totalPaid: agent.totalPaid,
       },
-  
+
       statistics: {
         // Appointment statistics
         appointmentStats,
-        
+
         // Wallet statistics
         walletStats,
-        
+
         // Performance metrics
         performance: {
-          averageEarningPerAppointment: agent.completedAppointments > 0 
-            ? agent.totalEarned / agent.completedAppointments 
+          averageEarningPerAppointment: agent.completedAppointments > 0
+            ? agent.totalEarned / agent.completedAppointments
             : 0,
-          completionRate: totalAppointments > 0 
-            ? (agent.completedAppointments / totalAppointments) * 100 
+          completionRate: totalAppointments > 0
+            ? (agent.completedAppointments / totalAppointments) * 100
             : 0,
           monthlyEarningTrend: await this.getMonthlyEarningTrend(agent.id)
         }
       },
-  
+
       recentActivity: {
         payments: recentPayments,
         reviews: reviews,
         appointments: recentAppointments,
       },
-  
+
       payoutHistory: payoutHistory
     };
   }
-  
+
   // Helper method for appointment statistics
   private async getAppointmentStats(agentId: number) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
+
     const [
       totalAccepted,
       totalCompleted,
@@ -417,7 +419,7 @@ export class AgentsService {
         createdAt: MoreThanOrEqual(thirtyDaysAgo)
       })
     ]);
-  
+
     return {
       accepted: totalAccepted,
       completed: totalCompleted,
@@ -428,12 +430,12 @@ export class AgentsService {
       successRate: totalAccepted > 0 ? (totalCompleted / totalAccepted) * 100 : 0
     };
   }
-  
+
   // Helper method for wallet statistics
   private async getWalletStats(agent: Agent) {
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
-  
+
     const [recentEarnings, recentPayouts, totalTransactions] = await Promise.all([
       this.walletTransactionRepository
         .createQueryBuilder('wt')
@@ -442,7 +444,7 @@ export class AgentsService {
         .andWhere('wt.created_at >= :date', { date: thirtyDaysAgo })
         .select('SUM(wt.amount)', 'total')
         .getRawOne(),
-  
+
       this.walletTransactionRepository
         .createQueryBuilder('wt')
         .where('wt.agent_id = :agentId', { agentId: agent.user.id })
@@ -450,49 +452,49 @@ export class AgentsService {
         .andWhere('wt.created_at >= :date', { date: thirtyDaysAgo })
         .select('SUM(wt.amount)', 'total')
         .getRawOne(),
-  
+
       this.walletTransactionRepository.count({
         where: { agent: { id: agent.user.id } }
       })
     ]);
-  
+
     return {
       earningsLast30Days: parseFloat(recentEarnings.total) || 0,
       payoutsLast30Days: parseFloat(recentPayouts.total) || 0,
       totalTransactions: totalTransactions,
-      averageTransactionAmount: totalTransactions > 0 
-        ? agent.totalEarned / totalTransactions 
+      averageTransactionAmount: totalTransactions > 0
+        ? agent.totalEarned / totalTransactions
         : 0
     };
   }
-  
+
   // Helper method for payout history
   private async getPayoutHistory(agentId: number, page: number = 1, limit: number = 10, filters?: any) {
     const skip = (page - 1) * limit;
-  
+
     const query = this.paymentRepo
       .createQueryBuilder('payment')
       .leftJoinAndSelect('payment.agent', 'agent')
       .leftJoinAndSelect('payment.processedBy', 'admin')
       .where('payment.agent_id = :agentId', { agentId })
       .orderBy('payment.createdAt', 'DESC');
-  
+
     if (filters?.status) {
       query.andWhere('payment.status = :status', { status: filters.status });
     }
-  
+
     if (filters?.dateFrom && filters?.dateTo) {
       query.andWhere('payment.paid_at BETWEEN :dateFrom AND :dateTo', {
         dateFrom: filters.dateFrom,
         dateTo: filters.dateTo,
       });
     }
-  
+
     const [payments, total] = await query
       .skip(skip)
       .take(limit)
       .getManyAndCount();
-  
+
     return {
       data: payments,
       pagination: {
@@ -503,12 +505,12 @@ export class AgentsService {
       },
     };
   }
-  
+
   // Helper method for monthly earning trend
   private async getMonthlyEarningTrend(agentId: number) {
     const sixMonthsAgo = new Date();
     sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
-  
+
     const monthlyEarnings = await this.walletTransactionRepository
       .createQueryBuilder('wt')
       .select("TO_CHAR(wt.created_at, 'YYYY-MM') as month")
@@ -519,7 +521,7 @@ export class AgentsService {
       .groupBy("TO_CHAR(wt.created_at, 'YYYY-MM')")
       .orderBy('month', 'ASC')
       .getRawMany();
-  
+
     return monthlyEarnings.map(item => ({
       month: item.month,
       earnings: parseFloat(item.total) || 0
@@ -649,8 +651,8 @@ async getAgentWalletStats(agentId: number) {
       earningsLast30Days: parseFloat(recentEarnings.total) || 0,
       payoutsLast30Days: parseFloat(recentPayouts.total) || 0,
       availableForPayout: agent.walletBalance,
-      averageEarningPerAppointment: agent.completedAppointments > 0 
-        ? agent.totalEarned / agent.completedAppointments 
+      averageEarningPerAppointment: agent.completedAppointments > 0
+        ? agent.totalEarned / agent.completedAppointments
         : 0
     }
   };
@@ -658,8 +660,8 @@ async getAgentWalletStats(agentId: number) {
 
 // Admin creates manual payout for agent
 async createManualPayout(
-  agentId: number, 
-  amount: number, 
+  agentId: number,
+  amount: number,
   adminUser: User,
   notes?: string
 ) {
@@ -791,8 +793,8 @@ async getPayoutSummary() {
     .createQueryBuilder('payment')
     .select('SUM(payment.amount)', 'total')
     .where('payment.status = :status', { status: PaymentStatus.COMPLETED })
-    .andWhere('payment.paid_at >= :date', { 
-      date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) 
+    .andWhere('payment.paid_at >= :date', {
+      date: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
     })
     .getRawOne();
 
@@ -805,8 +807,8 @@ async getPayoutSummary() {
 }
 
 async updateAgentVisitAmount(
-  agentId: number, 
-  visitAmount: number, 
+  agentId: number,
+  visitAmount: number,
   adminUser: User,
   notes?: string
 ): Promise<Agent> {
@@ -816,7 +818,7 @@ async updateAgentVisitAmount(
       where: { id: agentId },
       relations: ['user']
     });
-    
+
     if (!agent) {
       throw new NotFoundException('Agent not found');
     }

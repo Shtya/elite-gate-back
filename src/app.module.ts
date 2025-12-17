@@ -41,7 +41,7 @@ import { BlogModule } from "./blog/blog.module,";
       password: process.env.DATABASE_PASSWORD,
       database: process.env.DATABASE_NAME,
       entities: [__dirname + "/../**/*.entity{.ts,.js}"], // Adjusted path
-      synchronize: false, 
+      synchronize: false,
     }),
 
     // JwtModule.register({

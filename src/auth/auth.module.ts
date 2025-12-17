@@ -5,11 +5,18 @@ import { AuthService } from './auth.service';
 import { AuthController } from './auth.controller';
 import { JwtStrategy } from './strategies/jwt.strategy';
 import { User, AuthSession } from 'entities/global.entity';
-import { MailService } from 'common/nodemailer';
+
+
+
+
+
+
+
+import { MailService } from '../../common/nodemailer';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { RolesGuard } from './guards/roles.guard';
-import { NotificationsService } from 'src/notifications/notifications.service';
-import { NotificationsModule } from 'src/notifications/notifications.module';
+import { NotificationsService } from '../notifications/notifications.service';
+import { NotificationsModule } from '../notifications/notifications.module';
 
 @Module({
   imports: [

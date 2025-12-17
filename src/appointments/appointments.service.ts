@@ -1,9 +1,10 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between, In } from 'typeorm';
-import { Appointment, AppointmentStatusHistory, AppointmentStatus, User, Property, NotificationType, NotificationChannel, UserType, AgentAppointmentRequest, Agent, AgentAppointmentRequestStatus, AgentApprovalStatus, AgentEarning, PaymentStatus, WalletTransaction } from 'entities/global.entity';
+
+import { Appointment, AppointmentStatusHistory, AppointmentStatus, User, Property, NotificationType, NotificationChannel, UserType, AgentAppointmentRequest, Agent, AgentAppointmentRequestStatus, AgentApprovalStatus, AgentEarning, PaymentStatus, WalletTransaction } from '../../entities/global.entity';
 import { CreateAppointmentDto, UpdateAppointmentDto, UpdateStatusDto, AppointmentQueryDto } from '../../dto/appointments.dto';
-import { NotificationsService } from 'src/notifications/notifications.service';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -34,23 +35,23 @@ export class AppointmentsService {
     // 1. Property
     const startDateTime = this.combineDateTime(createAppointmentDto.appointmentDate, createAppointmentDto.startTime);
     const endDateTime = this.combineDateTime(createAppointmentDto.appointmentDate, createAppointmentDto.endTime);
-  
+
     if (endDateTime <= startDateTime) {
       throw new BadRequestException("End time must be after start time.");
     }
-  
+
     const property = await this.propertiesRepository.findOne({
       where: { id: createAppointmentDto.propertyId },
       relations: ["area", "city"]
     });
     if (!property) throw new NotFoundException("Property not found");
-  
+
     // 2. Customer
     const customer = await this.usersRepository.findOne({
       where: { id: createAppointmentDto.customerId },
     });
     if (!customer) throw new NotFoundException("Customer not found");
-  
+
     // 3. Check for overlapping ACCEPTED or PENDING appointments
     const overlapping = await this.appointmentsRepository
       .createQueryBuilder("appointment")
@@ -65,23 +66,23 @@ export class AppointmentsService {
         }
       )
       .getOne();
-  
+
     if (overlapping) {
       throw new ConflictException(
         "You already have an appointment (pending or accepted) at this time for this property."
       );
     }
-  
+
     // 4. Get all APPROVED agents
     const agents = await this.agentRepository.find({
       relations: ["cities", "areas", "user"],
       where: { status: AgentApprovalStatus.APPROVED }
     });
-    
+
     if (agents.length === 0) {
       throw new NotFoundException("No approved agents found.");
     }
-  
+
     // 5. Create the appointment (status: PENDING)
     const appointment = this.appointmentsRepository.create({
       ...createAppointmentDto,
@@ -90,15 +91,15 @@ export class AppointmentsService {
       agent: null, // No agent assigned initially
       status: AppointmentStatus.PENDING,
     });
-  
+
     const savedAppointment = await this.appointmentsRepository.save(appointment);
-  
+
     // 6. Create agent requests & send notifications
     const agentRequests = [];
-    
+
     for (const agent of agents) {
       let shouldSendRequest = false;
-  
+
       // Check if agent serves this property's area
       if (agent.cities && agent.cities.length > 0) {
         if (agent.cities.length > 1) {
@@ -109,20 +110,20 @@ export class AppointmentsService {
           shouldSendRequest = agent.areas.some(area => area.id === property.area.id);
         }
       }
-  
+
       if (!shouldSendRequest) continue;
-  
+
       // Create agent appointment request
       const request = this.agentAppointmentRequestRepository.create({
         appointment: savedAppointment,
-        agent: agent.user, 
+        agent: agent.user,
         // Use agent.user (User entity) not agent (Agent entity)
         status: AppointmentStatus.PENDING,
       });
-  
+
       const savedRequest = await this.agentAppointmentRequestRepository.save(request);
       agentRequests.push(savedRequest);
-  
+
       // Send notification to agent
       await this.notificationsService.createNotification({
         userId: agent.user.id,
@@ -133,15 +134,15 @@ export class AppointmentsService {
         channel: NotificationChannel.IN_APP,
       });
     }
-  
+
     // 7. If no agents were matched, update appointment status
     if (agentRequests.length === 0) {
       appointment.status = AppointmentStatus.REJECTED;
       await this.appointmentsRepository.save(appointment);
-      
+
       throw new NotFoundException("No agents available for this property location.");
     }
-  
+
     // 8. Notify customer
     await this.notificationsService.createNotification({
       userId: customer.id,
@@ -151,7 +152,7 @@ export class AppointmentsService {
       relatedId: savedAppointment.id,
       channel: NotificationChannel.IN_APP,
     });
-  
+
     // 9. Notify admin
     await this.notificationsService.notifyUserType(UserType.ADMIN, {
       type: NotificationType.SYSTEM,
@@ -160,12 +161,12 @@ export class AppointmentsService {
       relatedId: savedAppointment.id,
       channel: NotificationChannel.IN_APP,
     });
-  
+
     return savedAppointment;
   }
-  
-  
-  
+
+
+
   async respondToAppointmentRequest(
     requestId: number,
     agentId: number,
@@ -176,29 +177,29 @@ export class AppointmentsService {
       where: { id: requestId },
       relations: ["appointment", "agent", "appointment.customer"],
     });
-  
-  
+
+
     const agent = await this.agentRepository.findOne({
       where: { user: { id: agentId } },
     });
-  
+
     if (!request) throw new NotFoundException("Request not found");
     if (!agent) throw new NotFoundException("Agent not found");
-  
+
     if (request.agent.id !== agent.id) {
       throw new ForbiddenException("You don't have access to this request");
     }
-  
+
     if (request.status === AppointmentStatus.ACCEPTED) {
       throw new BadRequestException("Request has already been processed");
     }
-  
+
     const appointment = request.appointment;
-  
+
     // Combine date & time
     const startDateTime = this.combineDateTime(appointment.appointmentDate, appointment.startTime);
     const endDateTime = this.combineDateTime(appointment.appointmentDate, appointment.endTime);
-  
+
     // -----------------------------
     // ✔ If ACCEPTING → check overlap
     // -----------------------------
@@ -209,24 +210,24 @@ export class AppointmentsService {
           status: In([AppointmentStatus.CONFIRMED, AppointmentStatus.ACCEPTED]),
         },
       });
-  
+
       for (const appt of agentAppointments) {
         const existingStart = this.combineDateTime(appt.appointmentDate, appt.startTime);
         const existingEnd = this.combineDateTime(appt.appointmentDate, appt.endTime);
-  
+
         if (startDateTime < existingEnd && endDateTime > existingStart) {
           throw new ConflictException(
             `You already have another appointment at this time: ${appt.appointmentDate} ${appt.startTime}-${appt.endTime}`
           );
         }
       }
-  
+
       // Assign the agent
       appointment.agent = request.agent;
       appointment.status = AppointmentStatus.CONFIRMED;
-  
+
       await this.appointmentsRepository.save(appointment);
-  
+
       // Reject other pending requests
       await this.agentAppointmentRequestRepository.update(
         {
@@ -238,7 +239,7 @@ export class AppointmentsService {
           respondedAt: new Date(),
         }
       );
-  
+
       // Customer notification
       await this.notificationsService.createNotification({
         userId: appointment.customer.id,
@@ -248,7 +249,7 @@ export class AppointmentsService {
         relatedId: appointment.id,
         channel: NotificationChannel.IN_APP,
       });
-  
+
       // Notify admin
       await this.notificationsService.notifyUserType(UserType.ADMIN, {
         type: NotificationType.SYSTEM,
@@ -258,9 +259,9 @@ export class AppointmentsService {
         channel: NotificationChannel.IN_APP,
       });
     }
- 
+
     const oldStatus = appointment.status;
-  
+
     const statusHistory = this.statusHistoryRepository.create({
       appointment,
       oldStatus,
@@ -269,7 +270,7 @@ export class AppointmentsService {
       notes,
     });
     await this.statusHistoryRepository.save(statusHistory);
-  
+
     // -----------------------------
     // ✔ Notifications for status change (Merged)
     // -----------------------------
@@ -280,7 +281,7 @@ export class AppointmentsService {
       completed: 'Your appointment has been completed.',
       cancelled: 'Your appointment has been cancelled.',
     };
-  
+
     if (statusMessages[appointment.status]) {
       // Notify customer
       await this.notificationsService.createNotification({
@@ -291,7 +292,7 @@ export class AppointmentsService {
         relatedId: appointment.id,
         channel: NotificationChannel.IN_APP,
       });
-  
+
       // Notify agent
       if (appointment.agent) {
         await this.notificationsService.createNotification({
@@ -304,15 +305,15 @@ export class AppointmentsService {
         });
       }
     }
-  
+
     // Update request final status
     request.status = status;
     request.respondedAt = new Date();
     await this.agentAppointmentRequestRepository.save(request);
-  
+
     return { request, appointment };
   }
-  
+
   async getAgentAppointments(
     agentId: number,
     page: number = 1,
@@ -323,14 +324,14 @@ export class AppointmentsService {
     const agent = await this.agentRepository.findOne({
       where: { user: { id: agentId } },
     });
-  
+
     if (!agent) {
       throw new NotFoundException("Agent not found");
     }
-  
+
     const skip = (page - 1) * limit;
     const pendingSkip = (pendingPage - 1) * pendingLimit;
-  
+
     // ---- Confirmed Appointments (Paginated) ----
     const [appointments, totalAppointments] =
       await this.agentAppointmentRequestRepository.findAndCount({
@@ -343,7 +344,7 @@ export class AppointmentsService {
         skip,
         take: limit,
       });
-  
+
     // ---- Pending Requests (Paginated) ----
     const [pendingRequests, totalPending] =
       await this.agentAppointmentRequestRepository.findAndCount({
@@ -359,7 +360,7 @@ export class AppointmentsService {
         skip: pendingSkip,
         take: pendingLimit,
       });
-  
+
     return {
       confirmed: {
         data: appointments,
@@ -377,8 +378,8 @@ export class AppointmentsService {
       },
     };
   }
-  
-  
+
+
   async findOne(id: number): Promise<Appointment> {
     const appointment = await this.appointmentsRepository.findOne({
       where: { id },
@@ -497,10 +498,10 @@ export class AppointmentsService {
     changedBy: User,             // pass the logged-in user here
     notes?: string
   ): Promise<{ appointment: Appointment; request: AgentAppointmentRequest }> {
-  
+
     // Use transaction to ensure all operations succeed or fail together
     const result = await this.appointmentsRepository.manager.transaction(async (transactionalEntityManager) => {
-      
+
       // 1️⃣ Find the agent appointment request by requestId
       const request = await transactionalEntityManager.findOne(AgentAppointmentRequest, {
         where: {
@@ -509,57 +510,57 @@ export class AppointmentsService {
         },
         relations: ['appointment', 'appointment.property', 'appointment.customer', 'appointment.agent', 'agent'],
       });
-  
+
       if (!request) {
         throw new NotFoundException('Agent appointment request not found or not accepted.');
       }
-  
+
       const appointment = request.appointment;
       const oldStatus = appointment.status;
-  
+
       // 2️⃣ Validate status transition
       if (oldStatus === status) {
         throw new BadRequestException(`Appointment is already ${status}.`);
       }
-  
+
       let walletTransaction: WalletTransaction | null = null;
-  
+
       // 3️⃣ If status is COMPLETED, add visit amount to agent's wallet and update statistics
       if (status === AppointmentStatus.COMPLETED && request.agent) {
         const agent = await transactionalEntityManager.findOne(Agent, {
           where: { id: request.agent.id },
         });
-  
+
         if (!agent) {
           throw new NotFoundException('Agent not found.');
         }
-  
+
         // Check if commission was already added
         if (request.isCommissionAdded) {
           throw new BadRequestException('Commission has already been added for this appointment.');
         }
-  
+
         // Add visit amount to agent's wallet balance
         const visitAmount = agent.visitAmount || 0;
-        
+
         if (visitAmount <= 0) {
           throw new BadRequestException('Visit amount is not set for this agent.');
         }
-        
+
         const oldWalletBalance = Number(agent.walletBalance);
         const newWalletBalance = oldWalletBalance + Number(visitAmount);
-        
+
         // Update agent wallet and statistics
         agent.walletBalance = newWalletBalance;
         agent.totalEarned = Number(agent.totalEarned) + Number(visitAmount);
         agent.completedAppointments += 1; // Increment completed appointments
         agent.totalTransactions += 1; // Increment total transactions
-        
+
         // Update commission amount in the request
         request.commissionAmount = visitAmount;
         request.isCommissionAdded = true;
         request.commissionAddedAt = new Date();
-  
+
         // Create AgentEarning record
         const earning = transactionalEntityManager.create(AgentEarning, {
           agent: agent.user,
@@ -569,12 +570,12 @@ export class AppointmentsService {
           description: `Visit commission for appointment #${appointment.id}`,
           addedBy: changedBy,
         });
-  
+
         // Save agent, request, and earning within transaction
         await transactionalEntityManager.save(Agent, agent);
         await transactionalEntityManager.save(AgentAppointmentRequest, request);
         await transactionalEntityManager.save(AgentEarning, earning);
-  
+
         // Create Wallet Transaction record for audit
         walletTransaction = transactionalEntityManager.create(WalletTransaction, {
           agent: agent.user,
@@ -589,31 +590,31 @@ export class AppointmentsService {
           processedBy: changedBy,
           notes: `Automatic commission for completed appointment`,
         });
-  
+
         walletTransaction = await transactionalEntityManager.save(WalletTransaction, walletTransaction);
       }
-  
+
       // 4️⃣ If status is EXPIRED, still update the request status but don't add commission
       if (status === AppointmentStatus.EXPIRED && request.agent) {
         const agent = await transactionalEntityManager.findOne(Agent, {
           where: { id: request.agent.id },
         });
-  
+
         if (agent) {
           // Increment total transactions even for expired appointments
           agent.totalTransactions += 1;
           await transactionalEntityManager.save(Agent, agent);
         }
       }
-  
+
       // 5️⃣ Update statuses
       appointment.status = status;
       request.status = status;
-  
+
       // Save both appointment and request within transaction
       await transactionalEntityManager.save(AgentAppointmentRequest, request);
       const updatedAppointment = await transactionalEntityManager.save(Appointment, appointment);
-  
+
       // 6️⃣ Save status history within transaction
       const statusHistory = transactionalEntityManager.create(AppointmentStatusHistory, {
         appointment,
@@ -623,21 +624,21 @@ export class AppointmentsService {
         notes,
       });
       await transactionalEntityManager.save(AppointmentStatusHistory, statusHistory);
-  
+
       return {
         appointment: updatedAppointment,
         request: request,
         walletTransaction: walletTransaction
       };
     });
-  
+
     // 7️⃣ Send notifications after successful transaction
     try {
       const statusMessages = {
         [AppointmentStatus.COMPLETED]: 'Your appointment has been marked as completed.',
         [AppointmentStatus.EXPIRED]: 'Your appointment has expired.',
       };
-  
+
       // Notify customer
       await this.notificationsService.createNotification({
         userId: result.appointment.customer.id,
@@ -647,7 +648,7 @@ export class AppointmentsService {
         relatedId: result.appointment.id,
         channel: NotificationChannel.IN_APP,
       });
-  
+
       // Notify agent
       if (result.appointment.agent) {
         await this.notificationsService.createNotification({
@@ -658,13 +659,13 @@ export class AppointmentsService {
           relatedId: result.appointment.id,
           channel: NotificationChannel.IN_APP,
         });
-  
+
         // Send commission notification only for completed status
         if (status === AppointmentStatus.COMPLETED && result.request.agent) {
           const agent = await this.agentRepository.findOne({
             where: { id: result.request.agent.id },
           });
-          
+
           if (agent) {
             const visitAmount = agent.visitAmount || 0;
             await this.notificationsService.createNotification({
@@ -675,7 +676,7 @@ export class AppointmentsService {
               relatedId: result.appointment.id,
               channel: NotificationChannel.IN_APP,
             });
-  
+
             // Also notify admin about the commission payout
             await this.notificationsService.notifyUserType(UserType.ADMIN, {
               type: NotificationType.SYSTEM,
@@ -691,11 +692,11 @@ export class AppointmentsService {
       console.error('Failed to send notifications:', error);
       // Don't throw error here as notifications are not critical
     }
-  
+
     return {
       appointment: result.appointment,
       request: result.request
     };
   }
-  
+
 }
