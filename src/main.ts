@@ -4,8 +4,21 @@ import { ValidationPipe } from '@nestjs/common';
 import { ExpressAdapter, NestExpressApplication } from '@nestjs/platform-express';
 import * as express from 'express';
 import { join } from 'path';
+import rateLimit from 'express-rate-limit';
 
 const server = express();
+const limiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 20,
+  standardHeaders: true,
+  legacyHeaders: false,
+  message: {
+    statusCode: 429,
+    message: 'Too many requests, please try again later.',
+  },
+});
+
+server.use(limiter);
 
 export async function createApp() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, new ExpressAdapter(server));
