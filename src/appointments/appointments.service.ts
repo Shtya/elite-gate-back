@@ -107,7 +107,7 @@ export class AppointmentsService {
           shouldSendRequest = agent.cities.some(city => city.id === property.city.id);
         } else if (agent.cities.length === 1) {
           // Single city → match property area
-          shouldSendRequest = agent.areas.some(area => area.id === property.area.id);
+          shouldSendRequest = agent.areas.some(area => area.id === property.area?.id);
         }
       }
 

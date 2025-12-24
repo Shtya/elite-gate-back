@@ -55,6 +55,10 @@ export class MasterDataController {
       filters // filters
     );
   }
+@Get("cities-with-areas-count")
+getCitiesWithAreasCount(@Query() query: any) {
+  return this.masterDataService.getCitiesWithAreasCount(query);
+}
 
   @Get("cities/:id")
   getCity(@Param("id") id: string) {
