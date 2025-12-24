@@ -194,4 +194,63 @@ export class MasterDataService {
     const propertyType = await this.getPropertyType(id);
     await this.propertyTypesRepository.remove(propertyType);
   }
+
+  async getCitiesWithAreasCount(query: any) {
+  const page = Number(query.page) || 1;
+  const limit = Number(query.limit) || 100;
+  const skip = (page - 1) * limit;
+
+  const sortBy = query.sortBy || "name";
+  const sortOrder = query.sortOrder?.toUpperCase() === "DESC" ? "DESC" : "ASC";
+  const search = query.q || query.search;
+
+  const qb = this.citiesRepository
+    .createQueryBuilder("city")
+    .leftJoin("city.areas", "area")
+    .select("city.id", "id")
+    .addSelect("city.name", "name")
+    .addSelect("city.isActive", "isActive")
+    .addSelect("COUNT(area.id)", "areasCount")
+    .groupBy("city.id");
+
+  // 🔍 Search (same as CRUD.findAll)
+  if (search) {
+    qb.andWhere("LOWER(city.name) LIKE LOWER(:search)", {
+      search: `%${search}%`,
+    });
+  }
+
+  // ✅ Filters
+  if (typeof query.isActive !== "undefined") {
+    qb.andWhere("city.isActive = :isActive", {
+      isActive:
+        query.isActive === "true"
+          ? true
+          : query.isActive === "false"
+          ? false
+          : query.isActive,
+    });
+  }
+
+  // ↕ Sorting
+  qb.orderBy(`city.${sortBy}`, sortOrder);
+
+  // 📄 Pagination
+  qb.skip(skip).take(limit);
+
+  // 📊 Count (distinct cities)
+  const total = await qb.getCount();
+  const data = await qb.getRawMany();
+
+  return {
+    data,
+    meta: {
+      total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
+    },
+  };
+}
+
 }

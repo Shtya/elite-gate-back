@@ -14,13 +14,17 @@ interface RequestWithUser extends Request {
 @Controller('appointments')
 @UseGuards(JwtAuthGuard, RolesGuard)
 export class AppointmentsController {
-  constructor(private readonly appointmentsService: AppointmentsService) {}
+  constructor(private readonly appointmentsService: AppointmentsService
+
+
+  ) {}
 
   @Post()
   @Roles(UserType.CUSTOMER, UserType.ADMIN, UserType.AGENT)
   create(@Body() createAppointmentDto: CreateAppointmentDto,@Req() req: RequestWithUser) {
     const userId = Number(req.user.id);
-    if(req.user.type === UserType.ADMIN){
+    console.log(userId)
+    if(req.user.userType === UserType.ADMIN){
       if(!createAppointmentDto.customerId){
         throw new Error("Customer ID is required when admin creates an appointment.");
       }
@@ -36,28 +40,28 @@ export class AppointmentsController {
   @Roles(UserType.ADMIN, UserType.AGENT, UserType.QUALITY)
   async findAll(@Query() query: any) {
     const repository = this.appointmentsService.appointmentsRepository;
-  
+
     // Pagination
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 10;
     const skip = (page - 1) * limit;
-  
+
     // Sorting
-    const sortBy = query.sortBy || 'appointmentDate';
+    const sortBy = query.sortBy || 'createdAt';
     const sortOrder: 'ASC' | 'DESC' = (query.sortOrder || 'DESC').toUpperCase() as any;
-  
+
     // Base query
     const qb = repository.createQueryBuilder('appointment')
       .skip(skip)
       .take(limit);
-  
+
     // Nested relations
     const relations = ['property', 'property.city', 'property.area', 'customer', 'agent'];
     const addedAliases = new Set<string>();
     relations.forEach(path => {
       const segments = path.split('.');
       let parentAlias = 'appointment';
-  
+
       segments.forEach(seg => {
         const alias = `${parentAlias}_${seg}`;
         if (!addedAliases.has(alias)) {
@@ -67,13 +71,13 @@ export class AppointmentsController {
         parentAlias = alias;
       });
     });
-  
+
     // Filters
     if (query.customerId) qb.andWhere('appointment.customer_id = :customerId', { customerId: Number(query.customerId) });
     if (query.agentId) qb.andWhere('appointment.agent_id = :agentId', { agentId: Number(query.agentId) });
     if (query.propertyId) qb.andWhere('appointment.property_id = :propertyId', { propertyId: Number(query.propertyId) });
     if (query.status) qb.andWhere('appointment.status = :status', { status: query.status });
-  
+
     // Optional search (if needed)
     if (query.q) {
       qb.andWhere(
@@ -81,13 +85,13 @@ export class AppointmentsController {
         { search: `%${query.q}%` }
       );
     }
-  
+
     // Sorting
     qb.orderBy(`appointment.${sortBy}`, sortOrder);
-  
+
     // Execute
     const [records, total] = await qb.getManyAndCount();
-  
+
     return {
       total_records: total,
       current_page: page,
@@ -182,7 +186,7 @@ async respondToRequest(
     const page = Number(query.page) || 1;
     const limit = Number(query.limit) || 10;
     const skip = (page - 1) * limit;
-  
+
     const qb = repository.createQueryBuilder('appointment')
       .leftJoinAndSelect('appointment.property', 'property')
       .leftJoinAndSelect('property.city', 'city')        // nested join
@@ -193,7 +197,7 @@ async respondToRequest(
       .skip(skip)
       .take(limit)
       .orderBy('appointment.appointmentDate', 'DESC');
-  
+
     // Optional filters
     if (query.status) {
       qb.andWhere('appointment.status = :status', { status: query.status });
@@ -201,9 +205,9 @@ async respondToRequest(
     if (query.propertyId) {
       qb.andWhere('property.id = :propertyId', { propertyId: Number(query.propertyId) });
     }
-  
+
     const [records, total] = await qb.getManyAndCount();
-  
+
     return {
       total_records: total,
       current_page: page,
@@ -212,5 +216,5 @@ async respondToRequest(
     };
   }
 
-  
+
   }
