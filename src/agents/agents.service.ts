@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
+import { toWebPathFiles } from 'common/upload.config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository } from 'typeorm';
 
@@ -205,7 +206,9 @@ export class AgentsService {
 
   async update(id: number, dto: UpdateAgentDto): Promise<Agent> {
     const agent = await this.findOne(id);
-
+    if (!agent) {
+      throw new NotFoundException('Agent not found');
+    }
     if (!dto.cityIds && !dto.areaIds) {
       Object.assign(agent, dto);
       return this.agentsRepository.save(agent);
@@ -579,17 +582,17 @@ async registerAgent(
       channel: NotificationChannel.IN_APP,
     });
   }
-  // 5️⃣ Create agent entity
-  const agent = this.agentsRepository.create({
-    user,
-    visitAmount:registerDto.visitAmount,
+    // 5️⃣ Create agent entity
+    const agent = this.agentsRepository.create({
+      user,
+      visitAmount:registerDto.visitAmount,
     identityProofUrl: files?.identityProof?.[0]
-      ? `/uploads/images/${files.identityProof[0].filename}`
-      : undefined,
-    residencyDocumentUrl: files?.residencyDocument?.[0]
-      ? `/uploads/images/${files.residencyDocument[0].filename}`
-      : undefined,
-  });
+        ? toWebPathFiles(files.identityProof[0].filename)
+        : registerDto.identityProof,
+      residencyDocumentUrl: files?.residencyDocument?.[0]
+        ? toWebPathFiles(files.residencyDocument[0].filename)
+        : registerDto.residencyDocument,
+    });
   console.log(agent)
   // 6️⃣ Resolve city & area assignment
   const { cities, areas } = await this.resolveCityAndAreaSelection(

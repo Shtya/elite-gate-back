@@ -103,7 +103,8 @@ export class PropertiesController {
   ) {
     const propertyId = +id;
     const updated = await this.propertiesService.update(propertyId, updatePropertyDto);
-
+    const property = await this.propertiesService.findOne(propertyId);
+    const medias = property.medias;
     if (files && files.length > 0) {
       // handle new media uploads
       const uploadedMedias = files.map((file, i) => {
@@ -115,7 +116,9 @@ export class PropertiesController {
           orderIndex: i,
         };
       });
-
+      for (const media of medias) {
+        await this.propertiesService.removeMedia(propertyId, media.id);
+      }
       await this.propertiesService.addManyMedia(propertyId, uploadedMedias);
     }
 

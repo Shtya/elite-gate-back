@@ -160,12 +160,13 @@ export class PropertyListingRequestsService {
         requestId: request.id,
       },
     );
-  
+  if (request.owner.email){
     await this.mailService.transporter.sendMail({
       to: request.owner.email,
       subject: 'Your Property Listing Has Been Rejected',
       html: htmlContent,
     });
+  }
   
     return savedRequest;
   }
@@ -185,12 +186,13 @@ export class PropertyListingRequestsService {
       propertyTitle: 'Your Property',
       propertyUrl: `${process.env.FRONTEND_URL}/property/${request.id}`,
     });
-  
+  if(request.owner.email){
     await this.mailService.transporter.sendMail({
       to: request.owner.email,
       subject: 'Your Property Is Now Live!',
       html: htmlContent,
     });
+  }
   
     return savedRequest;
   }
