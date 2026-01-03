@@ -14,7 +14,7 @@ import {
   Req,
 } from "@nestjs/common";
 import { FileFieldsInterceptor } from "@nestjs/platform-express";
-import { imageUploadOptions } from "common/upload.config";
+import { genericUploadOptions, toWebPathFiles } from "common/upload.config";
 
 import { AgentsService } from "./agents.service";
 import {
@@ -48,7 +48,7 @@ export class AgentsController {
         { name: 'identityProof', maxCount: 1 },
         { name: 'residencyDocument', maxCount: 1 },
       ],
-      imageUploadOptions,
+      genericUploadOptions,
     ),
   )
   async create(
@@ -66,10 +66,10 @@ export class AgentsController {
     }
   
     if (files?.identityProof?.[0]) {
-      createAgentDto.identityProof = `/uploads/images/${files.identityProof[0].filename}`;
+      createAgentDto.identityProof = toWebPathFiles(files.identityProof[0].filename);
     }
     if (files?.residencyDocument?.[0]) {
-      createAgentDto.residencyDocument = `/uploads/images/${files.residencyDocument[0].filename}`;
+      createAgentDto.residencyDocument = toWebPathFiles(files.residencyDocument[0].filename);
     }
   
     if (!createAgentDto.identityProof || !createAgentDto.residencyDocument) {
@@ -127,7 +127,7 @@ export class AgentsController {
         { name: 'profilePhotoUrl', maxCount: 1 },
         { name: 'identityProof', maxCount: 1 },
         { name: 'residencyDocument', maxCount: 1 },
-      ]),
+      ], genericUploadOptions),
     )
   async registerAgent(
     @Body() registerDto: RegisterDto & {cityIds: any[]; areaIds?: any[], visitAmount?:number,},
@@ -144,11 +144,14 @@ export class AgentsController {
     if (registerDto.areaIds) registerDto.areaIds = registerDto.areaIds.map(String);
   
     if (files?.identityProof?.[0]) {
-      registerDto.identityProof = `/uploads/images/${files.identityProof[0].filename}`;
+      registerDto.identityProof = toWebPathFiles(files.identityProof[0].filename);
     }
     if (files?.residencyDocument?.[0]) {
-      registerDto.residencyDocument = `/uploads/images/${files.residencyDocument[0].filename}`;
+      registerDto.residencyDocument = toWebPathFiles(files.residencyDocument[0].filename);
     }
+    if (files?.profilePhotoUrl?.[0]) {
+        registerDto.profilePhotoUrl = toWebPathFiles(files.profilePhotoUrl[0].filename);
+      }
   
     return this.agentsService.registerAgent(registerDto, files);
   }
@@ -172,19 +175,24 @@ export class AgentsController {
         { name: 'identityProof', maxCount: 1 },
         { name: 'residencyDocument', maxCount: 1 },
       ],
-      imageUploadOptions,
+      genericUploadOptions
     ),
   )
   update(
     @Param('id') id: string,
     @Body() updateAgentDto: UpdateAgentDto,
-    @UploadedFiles() files?: { identityProof?: Express.Multer.File[]; residencyDocument?: Express.Multer.File[] },
+@UploadedFiles()
+files: {
+  identityProof?: Express.Multer.File[];
+  residencyDocument?: Express.Multer.File[];
+},
   ) {
+
     if (files?.identityProof?.[0]) {
-      updateAgentDto.identityProof = `/uploads/images/${files.identityProof[0].filename}`;
+      updateAgentDto.identityProof = toWebPathFiles(files.identityProof[0].filename);
     }
     if (files?.residencyDocument?.[0]) {
-      updateAgentDto.residencyDocument = `/uploads/images/${files.residencyDocument[0].filename}`;
+      updateAgentDto.residencyDocument = toWebPathFiles(files.residencyDocument[0].filename);
     }
   
     // cityIds and areaIds may contain "all"
