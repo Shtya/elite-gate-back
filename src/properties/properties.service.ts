@@ -22,7 +22,7 @@ export class PropertiesService {
     private notificationsService: NotificationsService,
   ) {}
 
-  async create(createPropertyDto: CreatePropertyDto): Promise<Property> {
+  async create(createPropertyDto: CreatePropertyDto, user: User): Promise<Property> {
     const { propertyTypeId, cityId, areaId } = createPropertyDto;
 
     // Run all FK lookups in parallel (Huge improvement)
@@ -41,7 +41,7 @@ export class PropertiesService {
       propertyType,
       city,
       area,
-      createdBy: { id: 1 } as User,
+      createdBy: user,
     });
 
     // Save property BEFORE notifications
@@ -82,7 +82,6 @@ export class PropertiesService {
       where: { id },
       relations: ['propertyType', 'city', 'area', 'createdBy', 'medias'],
     });
-
     if (!property) {
       throw new NotFoundException('Property not found');
     }
@@ -95,19 +94,19 @@ export class PropertiesService {
 
     if (updatePropertyDto.propertyTypeId) {
       property.propertyType = await this.propertyTypeRepository.findOne({
-        where: { id: updatePropertyDto.propertyTypeId },
+        where: { id: Number(updatePropertyDto.propertyTypeId) },
       });
     }
-
+    console.log(updatePropertyDto.cityId)
     if (updatePropertyDto.cityId) {
       property.city = await this.cityRepository.findOne({
-        where: { id: updatePropertyDto.cityId },
+        where: { id: Number(updatePropertyDto.cityId)},
       });
     }
 
     if (updatePropertyDto.areaId) {
       property.area = await this.areaRepository.findOne({
-        where: { id: updatePropertyDto.areaId },
+        where: { id: Number(updatePropertyDto.areaId) },
       });
     }
 
