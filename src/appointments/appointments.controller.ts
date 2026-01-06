@@ -27,7 +27,7 @@ export class AppointmentsController {
       if(!createAppointmentDto.customerId){
         throw new Error("Customer ID is required when admin creates an appointment.");
       }
-    }git
+    }
     else{
       createAppointmentDto.customerId = userId;
 

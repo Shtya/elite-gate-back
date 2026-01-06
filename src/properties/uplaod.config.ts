@@ -2,6 +2,7 @@
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
+import { BadRequestException } from '@nestjs/common';
 
 function ensureDir(dir: string) {
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true });
@@ -32,5 +33,26 @@ export const mixedUploadOptions = {
   },
   limits: {
     fileSize: 200 * 1024 * 1024, // 200MB max (video)
+  },
+};
+
+export const imageUploadOptions = {
+  storage: diskStorage({
+    destination: (req, file, cb) => {
+      const dir = join(process.cwd(), 'uploads', 'images');
+      ensureDir(dir);
+      cb(null, dir);
+    },
+    filename: (req, file, cb) => cb(null, randName(file.originalname)),
+  }),
+  fileFilter: (req, file, cb) => {
+    // Strict image validation
+    if (/^image\/(jpeg|png|jpg|gif|webp|svg\+xml)$/.test(file.mimetype)) {
+      return cb(null, true);
+    }
+    return cb(new BadRequestException('Only image files are allowed!'), false);
+  },
+  limits: {
+    fileSize: 10 * 1024 * 1024, // 10MB max for images
   },
 };

@@ -310,16 +310,15 @@ export class AuthService {
    * Universal login that supports both email and phone with password
    */
   async login(loginDto: LoginDto): Promise<{ accessToken: string; refreshToken: string,user:User }> {
-    let user: User;
+    let user: User | null = null; // Explicitly type as User | null
 
+    const qb = this.usersRepository.createQueryBuilder("user")
+      .addSelect("user.passwordHash") // Explicitly select passwordHash
+      
     if (loginDto.email) {
-      user = await this.usersRepository.findOne({
-        where: { email: loginDto.email }
-      });
+      user = await qb.where("user.email = :email", { email: loginDto.email }).getOne();
     } else if (loginDto.phoneNumber) {
-      user = await this.usersRepository.findOne({
-        where: { phoneNumber: loginDto.phoneNumber }
-      });
+      user = await qb.where("user.phoneNumber = :phone", { phone: loginDto.phoneNumber }).getOne();
     } else {
       throw new BadRequestException("Either email or phone number is required");
     }
@@ -389,6 +388,7 @@ export class AuthService {
     if (
       !user ||
       !user.emailOtp ||
+      !user.emailOtpExpiresAt || 
       user.emailOtp !== otp ||
       user.emailOtpExpiresAt < new Date()
     ) {
@@ -758,7 +758,11 @@ export class AuthService {
     userId: number,
     { currentPassword, newPassword }: ChangePasswordDto
   ): Promise<{ message: string }> {
-    const user = await this.usersRepository.findOne({ where: { id: userId } });
+    const user = await this.usersRepository.createQueryBuilder('user')
+      .addSelect('user.passwordHash')
+      .where('user.id = :id', { id: userId })
+      .getOne();
+      
     if (!user || !user.passwordHash) {
       throw new UnauthorizedException("User not found");
     }

@@ -346,7 +346,7 @@ export class User extends CoreEntity {
   @JoinColumn({ name: 'verified_by' })
   verifiedBy?: User | null;
 
-  @Column({ nullable: true })
+  @Column({ nullable: true, select: false })
   passwordHash?: string;
 
   @Column({ nullable: true })

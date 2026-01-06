@@ -108,7 +108,6 @@ export class UpdatePropertyDto {
   propertyTypeId?: number;
 
   @IsOptional()
-  @Type(() => Number)
   cityId?: number;
 
   @IsOptional()

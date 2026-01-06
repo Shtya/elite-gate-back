@@ -1,4 +1,4 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, UseInterceptors, UploadedFiles } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, UseInterceptors, UploadedFiles, Req } from '@nestjs/common';
 import { PropertiesService } from './properties.service';
 import { CreatePropertyDto, UpdatePropertyDto, PropertyQueryDto, PropertyMediaDto, CreateManyPropertyMediaDto } from '../../dto/properties.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -8,7 +8,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { UserType } from '../../entities/global.entity';
 import { CRUD } from '../../common/crud.service';
 import { FilesInterceptor } from '@nestjs/platform-express';
-import { mixedUploadOptions } from './uplaod.config';
+import { mixedUploadOptions, imageUploadOptions } from './uplaod.config';
 
 function parseMedias(input: any): PropertyMediaDto[] {
   if (!input) return [];
@@ -32,19 +32,19 @@ export class PropertiesController {
   @Post()
   @UseGuards(JwtAuthGuard)
   @Roles(UserType.ADMIN, UserType.AGENT)
-  @UseInterceptors(FilesInterceptor('media', 50, mixedUploadOptions))
+  @UseInterceptors(FilesInterceptor('media', 50, imageUploadOptions))
   async create(
     @Body() createPropertyDto: CreatePropertyDto,
     @UploadedFiles() files: Express.Multer.File[],
+    @Req() req: any,
   ) {
-    const property = await this.propertiesService.create(createPropertyDto);
+    const property = await this.propertiesService.create(createPropertyDto, req.user);
 
     if (files && files.length > 0) {
       const uploadedMedias = files.map((file, i) => {
-        const isImage = /^image\//.test(file.mimetype);
-        const basePath = isImage ? '/uploads/images/' : '/uploads/videos/';
+        // Since we strictly filter for images now, we can hardcode the base path
         return {
-          mediaUrl: `${basePath}${file.filename}`,
+          mediaUrl: `/uploads/images/${file.filename}`,
           isPrimary: i === 0,
           orderIndex: i,
         };
@@ -95,23 +95,22 @@ export class PropertiesController {
   @Patch(':id')
   @UseGuards(JwtAuthGuard)
   @Roles(UserType.ADMIN, UserType.AGENT)
-  @UseInterceptors(FilesInterceptor('media', 50, mixedUploadOptions))
+  @UseInterceptors(FilesInterceptor('media', 50, imageUploadOptions))
   async update(
     @Param('id') id: string,
     @Body() updatePropertyDto: UpdatePropertyDto,
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
     const propertyId = +id;
+    console.log(updatePropertyDto)
     const updated = await this.propertiesService.update(propertyId, updatePropertyDto);
     const property = await this.propertiesService.findOne(propertyId);
     const medias = property.medias;
     if (files && files.length > 0) {
       // handle new media uploads
       const uploadedMedias = files.map((file, i) => {
-        const isImage = /^image\//.test(file.mimetype);
-        const basePath = isImage ? '/uploads/images/' : '/uploads/videos/';
         return {
-          mediaUrl: `${basePath}${file.filename}`,
+          mediaUrl: `/uploads/images/${file.filename}`,
           isPrimary: i === 0,
           orderIndex: i,
         };
@@ -134,7 +133,7 @@ export class PropertiesController {
   @Post(':id/media')
   @UseGuards(JwtAuthGuard)
   @Roles(UserType.ADMIN, UserType.AGENT)
-  @UseInterceptors(FilesInterceptor('media', 50, mixedUploadOptions))
+  @UseInterceptors(FilesInterceptor('media', 50, imageUploadOptions))
   async addMedia(@Param('id') id: string, @Body() body: CreateManyPropertyMediaDto, @UploadedFiles() files: Express.Multer.File[]) {
     const propertyId = +id;
 
@@ -142,10 +141,8 @@ export class PropertiesController {
     const metaFromBody = parseMedias(body?.medias); // may be []
 
     const uploadedAsItems: PropertyMediaDto[] = (files ?? []).map((f, i) => {
-      const isImg = /^image\//.test(f.mimetype);
-      const base = isImg ? '/uploads/images/' : '/uploads/videos/';
       return {
-        mediaUrl: `${base}${f.filename}`,
+        mediaUrl: `/uploads/images/${f.filename}`,
         isPrimary: false,
         orderIndex: i,
       };
