@@ -9,7 +9,7 @@ import rateLimit from 'express-rate-limit';
 const server = express();
 const limiter = rateLimit({
   windowMs: 60 * 1000,
-  max: 100,
+  max: 500,
   standardHeaders: true,
   legacyHeaders: false,
   message: {
