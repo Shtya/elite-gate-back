@@ -130,12 +130,13 @@ export class PropertiesService {
         // doesn't try to save/resurrect the deleted entities.
         property.medias = property.medias.filter(m => idsToKeep.has(m.id));
       }
-    } else if ((updatePropertyDto as any).removeMediaIds?.length) {
-       // Fallback to old behavior if mediaIds not sent but removeMediaIds is
-      const ids = (updatePropertyDto as any).removeMediaIds as number[];
-      await this.propertyMediaRepository.delete(ids);
-      property.medias = property.medias.filter(m => !ids.includes(m.id));
-    }
+    } 
+    // else if ((updatePropertyDto as any).removeMediaIds?.length) {
+    //    // Fallback to old behavior if mediaIds not sent but removeMediaIds is
+    //   const ids = (updatePropertyDto as any).removeMediaIds as number[];
+    //   await this.propertyMediaRepository.delete(ids);
+    //   property.medias = property.medias.filter(m => !ids.includes(m.id));
+    // }
 
     Object.assign(property, updatePropertyDto);
     
