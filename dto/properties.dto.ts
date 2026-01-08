@@ -190,6 +190,20 @@ export class UpdatePropertyDto {
   @Type(() => Number)
   agentsPercentage?: number;
 
+  @IsOptional()
+  @IsArray()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+        try {
+            return JSON.parse(value);
+        } catch (e) {
+            return [];
+        }
+    }
+    return value;
+  })
+  mediaIds?: number[];
+
 }
 
 export class PropertyQueryDto {

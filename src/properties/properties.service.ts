@@ -97,7 +97,7 @@ export class PropertiesService {
         where: { id: Number(updatePropertyDto.propertyTypeId) },
       });
     }
-    console.log(updatePropertyDto.cityId)
+
     if (updatePropertyDto.cityId) {
       property.city = await this.cityRepository.findOne({
         where: { id: Number(updatePropertyDto.cityId)},
@@ -110,13 +110,42 @@ export class PropertiesService {
       });
     }
 
+    // Handle Media Updates (Keep specified, remove others)
+    if (updatePropertyDto.mediaIds) {
+      // safe parsing in case it comes as string array or otherwise
+      const idsToKeep = new Set(
+        Array.isArray(updatePropertyDto.mediaIds)
+            ? updatePropertyDto.mediaIds.map((id) => Number(id))
+            : []
+      );
 
-    if ((updatePropertyDto as any).removeMediaIds?.length) {
+      // Existing media is loaded via findOne -> relations: ['medias']
+      // We identify what to remove
+      const mediaToRemove = property.medias.filter((m) => !idsToKeep.has(m.id));
+
+      if (mediaToRemove.length > 0) {
+        await this.propertyMediaRepository.remove(mediaToRemove);
+        
+        // CRITICAL: Update the property.medias array in memory so .save(property)
+        // doesn't try to save/resurrect the deleted entities.
+        property.medias = property.medias.filter(m => idsToKeep.has(m.id));
+      }
+    } else if ((updatePropertyDto as any).removeMediaIds?.length) {
+       // Fallback to old behavior if mediaIds not sent but removeMediaIds is
       const ids = (updatePropertyDto as any).removeMediaIds as number[];
       await this.propertyMediaRepository.delete(ids);
+      property.medias = property.medias.filter(m => !ids.includes(m.id));
     }
 
     Object.assign(property, updatePropertyDto);
+    
+    // cleanup temp property to avoid errors if strict
+    delete (property as any).mediaIds; 
+
+    // We can just save now. internal arrays are synced.
+    // Note: If updatePropertyDto has fields that conflict with relations (like cityId vs city object),
+    // Object.assign might overwrite the relation object with the ID if they share names, 
+    // but here DTO has `cityId` and entity has `city`, so it's fine.
 
     await this.notificationsService.createNotification({
       userId: property.createdBy.id,
@@ -128,6 +157,18 @@ export class PropertiesService {
     });
 
     return this.propertiesRepository.save(property);
+  }
+
+  async setPrimaryImage(id: number, mediaId: number): Promise<void> {
+    const property = await this.findOne(id);
+    // Unset all
+    const image = await this.propertyMediaRepository.findOne({ where: { id: mediaId ,property:{id}} });
+    if(!image){
+      throw new NotFoundException('Image not found');
+    }
+    await this.propertyMediaRepository.update({ property: { id } }, { isPrimary: false });
+    // Set specific
+    await this.propertyMediaRepository.update({ id: mediaId }, { isPrimary: true });
   }
 
   async remove(id: number): Promise<void> {
