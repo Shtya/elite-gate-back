@@ -102,26 +102,45 @@ export class PropertiesController {
     @UploadedFiles() files?: Express.Multer.File[],
   ) {
     const propertyId = +id;
-    console.log(updatePropertyDto)
+   // console.log(updatePropertyDto)
+    
+    // Ensure mediaIds is an array if it came as string from FormData (sometimes Transform might need help or manual handling)
+    // The DTO Transform should handle it, but good to be safe if `files` are present
+    
+    // User Requirement: "if mediaIds is not appear so upload only the image" (and remove others)
+    // Interpret: If files are being uploaded AND mediaIds is NOT provided, assume user wants to REPLACE all images with the new ones.
+    if (files && files.length > 0 && !updatePropertyDto.mediaIds) {
+        updatePropertyDto.mediaIds = [];
+    }
+
     const updated = await this.propertiesService.update(propertyId, updatePropertyDto);
     const property = await this.propertiesService.findOne(propertyId);
-    const medias = property.medias;
+    
+    // Handle new files
     if (files && files.length > 0) {
-      // handle new media uploads
       const uploadedMedias = files.map((file, i) => {
         return {
           mediaUrl: `/uploads/images/${file.filename}`,
-          isPrimary: i === 0,
-          orderIndex: i,
+          isPrimary: false, // New files are not primary by default unless logic dictates
+          orderIndex: property.medias.length + i, // Append to end
         };
       });
-      for (const media of medias) {
-        await this.propertiesService.removeMedia(propertyId, media.id);
-      }
+
       await this.propertiesService.addManyMedia(propertyId, uploadedMedias);
     }
 
     return this.propertiesService.findOne(propertyId);
+  }
+
+  @Patch(':id/media/:mediaId/primary')
+  @UseGuards(JwtAuthGuard)
+  @Roles(UserType.ADMIN, UserType.AGENT)
+  async setPrimary(
+      @Param('id') id: string,
+      @Param('mediaId') mediaId: string
+  ) {
+    await this.propertiesService.setPrimaryImage(+id, +mediaId);
+    return this.propertiesService.findOne(+id);
   }
 
   @Delete(':id')
