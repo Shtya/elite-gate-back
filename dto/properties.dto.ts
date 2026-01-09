@@ -69,7 +69,9 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsString()
   ownerName?: string;
-
+ @IsOptional()
+  @IsString()
+  videoUrl?: string;
   @IsOptional()
   @IsString()
   ownerPhone?: string;
@@ -189,7 +191,9 @@ export class UpdatePropertyDto {
   @IsNumber()
   @Type(() => Number)
   agentsPercentage?: number;
-
+ @IsOptional()
+  @IsString()
+  videoUrl?: string;
   @IsOptional()
   @IsArray()
   @Transform(({ value }) => {
