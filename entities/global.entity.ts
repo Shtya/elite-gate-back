@@ -434,7 +434,7 @@ export class Property extends CoreEntity {
   @Column({ type: 'smallint' })
   bedrooms: number;
 
-  @Column({type:'nvarchar',nullable:true})
+  @Column({type:'varchar',nullable:true})
   videoUrl:string
   @Column({ type: 'smallint' })
   bathrooms: number;
