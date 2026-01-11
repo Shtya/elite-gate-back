@@ -37,7 +37,7 @@ export class AppointmentsController {
   }
 
   @Get()
-  @Roles(UserType.ADMIN, UserType.AGENT, UserType.QUALITY)
+  @Roles(UserType.ADMIN, UserType.AGENT, UserType.QUALITY, UserType.CUSTOMER)
   async findAll(@Query() query: any) {
     const repository = this.appointmentsService.appointmentsRepository;
 
