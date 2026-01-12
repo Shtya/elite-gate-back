@@ -32,7 +32,7 @@ export class AppointmentsService {
     return d;
   }
   async create(createAppointmentDto: CreateAppointmentDto): Promise<Appointment> {
-    // 1. Property
+    
     const startDateTime = this.combineDateTime(createAppointmentDto.appointmentDate, createAppointmentDto.startTime);
     const endDateTime = this.combineDateTime(createAppointmentDto.appointmentDate, createAppointmentDto.endTime);
 
@@ -45,19 +45,24 @@ export class AppointmentsService {
       relations: ["area", "city"]
     });
     if (!property) throw new NotFoundException("Property not found");
+    
+    if (!property.city || !property.area) {
+      throw new BadRequestException("Property must have a valid City and Area assigned to book an appointment.");
+    }
 
     // 2. Customer
     const customer = await this.usersRepository.findOne({
       where: { id: createAppointmentDto.customerId },
     });
     if (!customer) throw new NotFoundException("Customer not found");
-
+    this.appointmentsRepository.find({where:{}})
     // 3. Check for overlapping ACCEPTED or PENDING appointments
     const overlapping = await this.appointmentsRepository
       .createQueryBuilder("appointment")
       .where("appointment.customer_id = :customerId", { customerId: createAppointmentDto.customerId })
       .andWhere("appointment.property_id = :propertyId", { propertyId: createAppointmentDto.propertyId })
       .andWhere("appointment.status IN (:...statuses)", { statuses: [AppointmentStatus.PENDING, AppointmentStatus.ACCEPTED] })
+      .andWhere('appointment.appointment_date = :appointmentDate', { appointmentDate: createAppointmentDto.appointmentDate })
       .andWhere(
         "(:startTime < appointment.endTime AND :endTime > appointment.startTime)",
         {
@@ -72,15 +77,20 @@ export class AppointmentsService {
         "You already have an appointment (pending or accepted) at this time for this property."
       );
     }
-
+   
     // 4. Get all APPROVED agents
     const agents = await this.agentRepository.find({
       relations: ["cities", "areas", "user"],
-      where: { status: AgentApprovalStatus.APPROVED }
+      where: { 
+        status: AgentApprovalStatus.APPROVED,
+        
+        cities: { id: property.city.id },
+        areas: { id: property.area.id }
+      },
     });
-
+    console.log(agents)
     if (agents.length === 0) {
-      throw new NotFoundException("No approved agents found.");
+      throw new NotFoundException("No approved agents found for this location.");
     }
 
     // 5. Create the appointment (status: PENDING)
@@ -98,21 +108,6 @@ export class AppointmentsService {
     const agentRequests = [];
 
     for (const agent of agents) {
-      let shouldSendRequest = false;
-
-      // Check if agent serves this property's area
-      if (agent.cities && agent.cities.length > 0) {
-        if (agent.cities.length > 1) {
-          // Multiple cities → match property city
-          shouldSendRequest = agent.cities.some(city => city.id === property.city.id);
-        } else if (agent.cities.length === 1) {
-          // Single city → match property area
-          shouldSendRequest = agent.areas.some(area => area.id === property.area?.id);
-        }
-      }
-
-      if (!shouldSendRequest) continue;
-
       // Create agent appointment request
       const request = this.agentAppointmentRequestRepository.create({
         appointment: savedAppointment,
@@ -336,7 +331,7 @@ export class AppointmentsService {
     const [appointments, totalAppointments] =
       await this.agentAppointmentRequestRepository.findAndCount({
         where: [
-          { agent: { id: agent.id },
+          { agent: { id:agentId },
           status: In([AppointmentStatus.ACCEPTED,AppointmentStatus.CONFIRMED,AppointmentStatus.COMPLETED,AppointmentStatus.EXPIRED]),
         },
         ],
@@ -349,7 +344,7 @@ export class AppointmentsService {
     const [pendingRequests, totalPending] =
       await this.agentAppointmentRequestRepository.findAndCount({
         where: {
-          agent: { id: agent.id },
+          agent: { id: agentId },
           status: In([AppointmentStatus.PENDING,AppointmentStatus.REJECTED]),
         },
         relations: [

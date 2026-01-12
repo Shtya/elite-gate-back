@@ -125,6 +125,10 @@ export class UsersService {
       }
     }
 
+    if (updateUserDto.password) {
+      const passwordHash = await bcrypt.hash(updateUserDto.password, 12);
+      updateUserDto.password = passwordHash;
+    }
     await this.usersRepository.update(id, updateUserDto);
     return this.usersRepository.findOne({ where: { id } });
   }
