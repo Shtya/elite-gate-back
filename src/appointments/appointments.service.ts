@@ -181,7 +181,7 @@ export class AppointmentsService {
     if (!request) throw new NotFoundException("Request not found");
     if (!agent) throw new NotFoundException("Agent not found");
 
-    if (request.agent.id !== agent.id) {
+    if (request.agent.id !== agentId) {
       throw new ForbiddenException("You don't have access to this request");
     }
 
