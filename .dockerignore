@@ -1,0 +1,24 @@
+# Exclude uploads folder from Docker builds
+# This prevents local uploads from being copied into Docker images
+uploads/
+uploads/**
+**/uploads/
+**/uploads/**
+
+# Also exclude other common files that shouldn't be in Docker
+node_modules
+npm-debug.log
+.git
+.gitignore
+.env
+.env.local
+.env.*.local
+.DS_Store
+*.log
+coverage
+.nyc_output
+.vscode
+.idea
+*.md
+!README.md
+

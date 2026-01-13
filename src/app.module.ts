@@ -30,7 +30,9 @@ import { ExportModule } from "./export/export.module";
 import { TeamModule } from "./team-member/team-member.module";
 import { ContactUsModule } from "./contactUs/contactUs.module";
 import { BlogModule } from "./blog/blog.module,";
+import { AppController } from "./app.controller";
 @Module({
+  controllers: [AppController],
   imports: [
     ConfigModule.forRoot(),
     TypeOrmModule.forRoot({
