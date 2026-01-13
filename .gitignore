@@ -14,8 +14,14 @@ lerna-debug.log*
 
 # OS
 .DS_Store
-/uploads/**
-uploads
+
+# Uploads directory - must be ignored to prevent deletion on pull
+# Ignore uploads folder at root and any subdirectory
+/uploads
+uploads/
+uploads/**
+**/uploads/
+**/uploads/**
 # Tests
 /coverage
 /.nyc_output
