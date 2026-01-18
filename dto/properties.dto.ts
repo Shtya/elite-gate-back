@@ -87,7 +87,9 @@ export class CreatePropertyDto {
   @IsOptional()
   @IsString()
   longitude?: string;
-
+  @IsOptional()
+  @IsString()
+  locationUrl?: string;
   @IsOptional()
   @IsString()
   mapPlaceId?: string;
@@ -100,6 +102,10 @@ export class UpdatePropertyDto {
   @IsOptional()
   @IsString()
   title?: string;
+
+  @IsOptional()
+  @IsString()
+  locationUrl?: string;
 
   @IsOptional()
   @IsString()
@@ -181,6 +187,8 @@ export class UpdatePropertyDto {
   @IsOptional()
   @IsString()
   mapPlaceId?: string;
+
+
 
   @IsOptional()
   @IsBoolean()

@@ -448,6 +448,8 @@ export class Property extends CoreEntity {
   @Column({ name: 'property_listing_request_id', type: 'int', nullable: true })
   propertyListingRequestId?: number | null;
 
+  @Column({ type: 'varchar', length: 500 ,nullable:true})
+  locationUrl?:string
   @Column({ type: 'jsonb' })
   specifications: Record<string, any>;
 
