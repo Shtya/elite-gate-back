@@ -57,7 +57,7 @@ export class PropertiesController {
   }
 
   @Get()
-  findAll(@Query() query: any) {
+  async findAll(@Query() query: any) {
     const filters: Record<string, any> = {};
 
     // equality filters
@@ -69,7 +69,7 @@ export class PropertiesController {
       else if (query.isActive === 'false') filters.isActive = false;
     }
 
-    return CRUD.findAll(
+    const result = await CRUD.findAll(
       this.propertiesService.propertiesRepository,
       'property',
       query.q || query.search,
@@ -85,6 +85,13 @@ export class PropertiesController {
         type: query.type || undefined,
       },
     );
+
+    const minMax = await this.propertiesService.getMinMaxPrice();
+    
+    return {
+        ...result,
+        minMaxPrice: minMax
+    };
   }
 
 
