@@ -139,12 +139,21 @@ export class CRUD {
     const sortField = sortBy || defaultSortBy;
     const sortDirection = sortOrder || 'DESC';
 
-    const columnExists = repository.metadata.columns.some(col => col.propertyName === sortField);
-    if (!columnExists) {
-      throw new BadRequestException(`Invalid sortBy field: '${sortField}'`);
-    }
+    const sortFields = sortField.split(',');
 
-    query.orderBy(`${query.alias}.${sortField}`, sortDirection);
+    sortFields.forEach((field, index) => {
+      const trimmedField = field.trim();
+      const columnExists = repository.metadata.columns.some(col => col.propertyName === trimmedField);
+      if (!columnExists) {
+        throw new BadRequestException(`Invalid sortBy field: '${trimmedField}'`);
+      }
+
+      if (index === 0) {
+        query.orderBy(`${query.alias}.${trimmedField}`, sortDirection);
+      } else {
+        query.addOrderBy(`${query.alias}.${trimmedField}`, sortDirection);
+      }
+    });
 
     const [data, total] = await query.getManyAndCount();
 
