@@ -196,8 +196,35 @@ files: {
     }
   
     // cityIds and areaIds may contain "all"
-    if (updateAgentDto.cityIds) updateAgentDto.cityIds = updateAgentDto.cityIds.map(Number);
-    if (updateAgentDto.areaIds) updateAgentDto.areaIds = updateAgentDto.areaIds.map(Number);
+    // cityIds and areaIds may contain "all"
+    console.log(updateAgentDto)
+    if (updateAgentDto.cityIds) {
+        let cityIds: any = updateAgentDto.cityIds;
+        if (typeof cityIds === 'string') {
+             try {
+                cityIds = JSON.parse(cityIds);
+             } catch (e) {
+                 cityIds = [cityIds];
+             }
+        }
+        if (Array.isArray(cityIds)) {
+             updateAgentDto.cityIds = cityIds.map(Number);
+        }
+    }
+
+    if (updateAgentDto.areaIds) {
+        let areaIds: any = updateAgentDto.areaIds;
+        if (typeof areaIds === 'string') {
+             try {
+                areaIds = JSON.parse(areaIds);
+             } catch (e) {
+                 areaIds = [areaIds];
+             }
+        }
+        if (Array.isArray(areaIds)) {
+            updateAgentDto.areaIds = areaIds.map(Number);
+        }
+    }
   
     return this.agentsService.update(+id, updateAgentDto);
   }

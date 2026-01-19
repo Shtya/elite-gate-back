@@ -35,6 +35,9 @@ export class FavoritesController {
       .createQueryBuilder('favorite_properties')
       .leftJoinAndSelect('favorite_properties.user', 'user')
       .leftJoinAndSelect('favorite_properties.property', 'property')
+      .leftJoinAndSelect('property.city', 'city')
+      .leftJoinAndSelect('property.area', 'area')
+      .leftJoinAndSelect('property.medias', 'media')
       .where('user.id = :userId', { userId });
   
     if (search) {

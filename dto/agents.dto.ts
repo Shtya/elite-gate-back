@@ -33,13 +33,10 @@ export class CreateAgentDto {
 }
 export class UpdateAgentDto {
   @IsOptional()
-  @IsArray()
-  @Type(() => Number)
+
   cityIds?: number[];
 
   @IsOptional()
-  @IsArray()
-  @Type(() => Number)
   areaIds?: number[];
 
   @IsOptional()

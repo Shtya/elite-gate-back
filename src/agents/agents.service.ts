@@ -205,7 +205,11 @@ export class AgentsService {
   }
 
   async update(id: number, dto: UpdateAgentDto): Promise<Agent> {
-    const agent = await this.findOne(id);
+    const agent = await this.agentsRepository.findOne({
+      where: { id },
+      relations: ['cities', 'areas']
+    });
+
     if (!agent) {
       throw new NotFoundException('Agent not found');
     }
@@ -213,7 +217,7 @@ export class AgentsService {
       Object.assign(agent, dto);
       return this.agentsRepository.save(agent);
     }
-
+    console.log(dto.areaIds)
     // use resolver here
     const { cities, areas } = await this.resolveCityAndAreaSelection(
       dto.cityIds ?? agent.cities.map(c => c.id),
