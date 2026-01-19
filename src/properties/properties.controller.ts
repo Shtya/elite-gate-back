@@ -74,7 +74,7 @@ export class PropertiesController {
       'property',
       query.q || query.search,
       query.page,       query.limit,
-      query.sortBy ?? 'createdAt',
+      query.sortBy ?? 'price,areaM2',
       query.sortOrder ?? 'DESC',
       ['propertyType', 'city', 'area', 'createdBy', 'medias'],
       ['title', 'description', 'price'],
