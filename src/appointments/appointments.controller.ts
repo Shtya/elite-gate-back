@@ -1,4 +1,5 @@
-import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Req, ParseIntPipe } from '@nestjs/common';
+import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Req, ParseIntPipe, UseFilters, UnauthorizedException } from '@nestjs/common';
+import { HttpStatusFilter } from 'common/http-status.filter';
 import { AppointmentsService } from './appointments.service';
 import { CreateAppointmentDto, UpdateAppointmentDto, AssignAgentDto, UpdateStatusDto, AppointmentQueryDto } from '../../dto/appointments.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -21,11 +22,14 @@ export class AppointmentsController {
 
   @Post()
   @Roles(UserType.CUSTOMER, UserType.ADMIN, UserType.AGENT)
+  @UseFilters(HttpStatusFilter)
   create(@Body() createAppointmentDto: CreateAppointmentDto,@Req() req: RequestWithUser) {
     const userId = Number(req.user.id);
-    if(req.user.userType === UserType.ADMIN){
-      if(!createAppointmentDto.customerId){
-        throw new Error("Customer ID is required when admin creates an appointment.");
+    if (req.user.userType === UserType.ADMIN) {
+      if (!createAppointmentDto.customerId) {
+        throw new UnauthorizedException(
+          'Customer ID is required when admin creates an appointment.',
+        );
       }
     }
     else{
