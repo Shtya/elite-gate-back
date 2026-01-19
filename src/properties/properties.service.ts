@@ -209,4 +209,19 @@ export class PropertiesService {
 
     await this.propertyMediaRepository.remove(media);
   }
+
+  async getMinMaxPrice(): Promise<{ min: number; max: number }> {
+    const query = this.propertiesRepository.createQueryBuilder('property');
+    
+    // Select min and max price
+    const result = await query
+      .select('MIN(property.price)', 'min')
+      .addSelect('MAX(property.price)', 'max')
+      .getRawOne();
+
+    return {
+      min: result ? Number(result.min) : 0,
+      max: result ? Number(result.max) : 0,
+    };
+  }
 }
