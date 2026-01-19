@@ -78,17 +78,26 @@ export class AppointmentsService {
       );
     }
    
-    // 4. Get all APPROVED agents
-    const agents = await this.agentRepository.find({
+
+    let agents = await this.agentRepository.find({
       relations: ["cities", "areas", "user"],
       where: { 
         status: AgentApprovalStatus.APPROVED,
-        
         cities: { id: property.city.id },
         areas: { id: property.area.id }
       },
     });
-    console.log(agents)
+
+    if (agents.length === 0) {
+       agents = await this.agentRepository.find({
+        relations: ["cities", "areas", "user"],
+        where: { 
+          status: AgentApprovalStatus.APPROVED,
+          cities: { id: property.city.id },
+        },
+      });
+    }
+
     if (agents.length === 0) {
       throw new NotFoundException("No approved agents found for this location.");
     }
