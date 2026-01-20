@@ -52,18 +52,18 @@ export class PaymentsService {
     // Notify the agent about a new payment
     await this.notificationsService.createNotification({
       userId: payment.agent.id,
-      type: NotificationType.SYSTEM,
-      title: 'New Payment',
-      message: `A new payment has been created for you with an amount of ${payment.amount} ${payment.currency}.`,
+      type: NotificationType.PAYMENT_SUCCESS,
+      title: 'دفعة جديدة',
+      message: `تم إنشاء دفعة جديدة لك بقيمة ${payment.amount} ${payment.currency}.`,
       relatedId: payment.id,
       channel: NotificationChannel.IN_APP,
     });
 
     // Notify the admin about the new payment
     await this.notificationsService.notifyUserType(UserType.ADMIN, {
-      type: NotificationType.SYSTEM,
-      title: 'New Payment Added',
-      message: `A new payment has been added for the agent ${payment.agent.fullName} with an amount of ${payment.amount} ${payment.currency}.`,
+      type: NotificationType.PAYMENT_SUCCESS,
+      title: 'تم إضافة دفعة جديدة',
+      message: `تم إضافة دفعة جديدة للوكيل ${payment.agent.fullName} بقيمة ${payment.amount} ${payment.currency}.`,
       relatedId: payment.id,
       channel: NotificationChannel.IN_APP,
     });

@@ -19,9 +19,9 @@ export class ContactUsService {
     const savedContact = await this.contactUsRepository.save(contact);
 
     await this.notificationsService.notifyUserType(UserType.ADMIN, {
-      type: NotificationType.SYSTEM,
-      title: 'New Contact Message Received',
-      message: `A new contact message has been submitted by ${savedContact.name} (${savedContact.email}).`,
+      type: NotificationType.CONTACT_US_MESSAGE,
+      title: 'تم استلام رسالة تواصل جديدة',
+      message: `تم تقديم رسالة تواصل جديدة بواسطة ${savedContact.name} (${savedContact.email}).`,
       relatedId: savedContact.id,
       channel: NotificationChannel.IN_APP,
     });

@@ -4,9 +4,10 @@ import { AppointmentsService } from './appointments.service';
 import { AppointmentsController } from './appointments.controller';
 import { Appointment, AppointmentStatusHistory, User, Property, AgentAppointmentRequest,Agent } from 'entities/global.entity';
 import { NotificationsModule } from 'src/notifications/notifications.module';
+import { AuthModule } from 'src/auth/auth.module';
 
 @Module({
-  imports: [TypeOrmModule.forFeature([Appointment, AppointmentStatusHistory, User, Property,AgentAppointmentRequest,Agent]) , NotificationsModule],
+  imports: [TypeOrmModule.forFeature([Appointment, AppointmentStatusHistory, User, Property,AgentAppointmentRequest,Agent]) , NotificationsModule, AuthModule],
   controllers: [AppointmentsController],
   providers: [AppointmentsService],
   exports: [AppointmentsService],

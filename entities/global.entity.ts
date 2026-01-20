@@ -193,11 +193,40 @@ export enum CampaignStatus {
 }
 
 export enum NotificationType {
-  APPOINTMENT_REMINDER = 'appointment_reminder',
-  RATING_REQUEST = 'rating_request',
-  FOLLOW_UP = 'follow_up',
+  // General / System
   SYSTEM = 'system',
+  FOLLOW_UP = 'follow_up',
   CAMPAIGN = 'campaign',
+
+  // Appointments
+  APPOINTMENT_NEW = 'appointment_new',
+  APPOINTMENT_REMINDER = 'appointment_reminder',
+  APPOINTMENT_ACCEPTED = 'appointment_accepted',
+  APPOINTMENT_REJECTED = 'appointment_rejected',
+  APPOINTMENT_CANCELLED = 'appointment_cancelled',
+  APPOINTMENT_COMPLETED = 'appointment_completed',
+  RATING_REQUEST = 'rating_request',
+
+  // Properties
+  PROPERTY_PENDING_REVIEW = 'property_pending_review',
+  PROPERTY_APPROVED = 'property_approved',
+  PROPERTY_REJECTED = 'property_rejected',
+  PROPERTY_UPDATED = 'property_updated',
+
+  // Agents
+  AGENT_NEW_REGISTRATION = 'agent_new_registration',
+  AGENT_APPROVED = 'agent_approved',
+  AGENT_REJECTED = 'agent_rejected',
+
+  // Payments
+  PAYMENT_SUCCESS = 'payment_success',
+  PAYMENT_FAILED = 'payment_failed',
+
+  // Reviews
+  REVIEW_SUBMITTED = 'review_submitted',
+
+  // Contact
+  CONTACT_US_MESSAGE = 'contact_us_message',
 }
 
 export enum NotificationChannel {

@@ -59,17 +59,17 @@ export class PropertiesService {
   private async sendNotificationsAsync(property: Property) {
     await Promise.all([
       this.notificationsService.notifyUserType(UserType.ADMIN, {
-        type: NotificationType.SYSTEM,
-        title: 'New Property Added',
-        message: `A new property has been added: ${property.title}`,
+        type: NotificationType.PROPERTY_PENDING_REVIEW,
+        title: 'تم إضافة عقار جديد',
+        message: `تم إضافة عقار جديد: ${property.title}`,
         relatedId: property.id,
         channel: NotificationChannel.IN_APP,
       }),
 
       this.notificationsService.notifyUserType(UserType.QUALITY, {
-        type: NotificationType.SYSTEM,
-        title: 'New Property Pending Review',
-        message: `The property "${property.title}" has been added and requires a quality review.`,
+        type: NotificationType.PROPERTY_PENDING_REVIEW,
+        title: 'عقار جديد بانتظار المراجعة',
+        message: `تم إضافة العقار "${property.title}" ويتطلب ومراجعة الجودة.`,
         relatedId: property.id,
         channel: NotificationChannel.IN_APP,
       }),
@@ -150,9 +150,9 @@ export class PropertiesService {
 
     await this.notificationsService.createNotification({
       userId: property.createdBy.id,
-      type: NotificationType.SYSTEM,
-      title: 'Property Updated',
-      message: `The property information has been updated: ${property.title}`,
+      type: NotificationType.PROPERTY_UPDATED,
+      title: 'تم تحديث العقار',
+      message: `تم تحديث معلومات العقار: ${property.title}`,
       relatedId: property.id,
       channel: NotificationChannel.IN_APP,
     });

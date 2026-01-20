@@ -1,10 +1,12 @@
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, Between, In } from 'typeorm';
+import { Repository, Between, In, EntityManager } from 'typeorm';
 
-import { Appointment, AppointmentStatusHistory, AppointmentStatus, User, Property, NotificationType, NotificationChannel, UserType, AgentAppointmentRequest, Agent, AgentAppointmentRequestStatus, AgentApprovalStatus, AgentEarning, PaymentStatus, WalletTransaction } from '../../entities/global.entity';
-import { CreateAppointmentDto, UpdateAppointmentDto, UpdateStatusDto, AppointmentQueryDto } from '../../dto/appointments.dto';
+import { Appointment, AppointmentStatusHistory, AppointmentStatus, User, Property, NotificationType, NotificationChannel, UserType, AgentAppointmentRequest, Agent, AgentAppointmentRequestStatus, AgentApprovalStatus, AgentEarning, PaymentStatus, WalletTransaction, AccessType, VerificationStatus } from '../../entities/global.entity';
+import { CreateAppointmentDto, UpdateAppointmentDto, UpdateStatusDto, AppointmentQueryDto, BookWithRegistrationDto } from '../../dto/appointments.dto';
 import { NotificationsService } from '../notifications/notifications.service';
+import * as bcrypt from 'bcryptjs';
+import { AuthService } from '../auth/auth.service';
 
 @Injectable()
 export class AppointmentsService {
@@ -22,17 +24,23 @@ export class AppointmentsService {
     @InjectRepository(Agent)
     public agentRepository: Repository<Agent>,
     private notificationsService: NotificationsService,
-
-
+    private authService: AuthService,
   ) {}
+
+
   private combineDateTime(date: string, time: string): Date {
     const [hours, minutes] = time.split(':').map(Number);
     const d = new Date(date);
     d.setUTCHours(hours, minutes, 0, 0);
     return d;
   }
-  async create(createAppointmentDto: CreateAppointmentDto): Promise<Appointment> {
-    
+  async create(createAppointmentDto: CreateAppointmentDto, manager?: EntityManager): Promise<Appointment> {
+    const appointmentsRepo = manager ? manager.getRepository(Appointment) : this.appointmentsRepository;
+    const propertiesRepo = manager ? manager.getRepository(Property) : this.propertiesRepository;
+    const usersRepo = manager ? manager.getRepository(User) : this.usersRepository;
+    const agentRepo = manager ? manager.getRepository(Agent) : this.agentRepository;
+    const agentRequestRepo = manager ? manager.getRepository(AgentAppointmentRequest) : this.agentAppointmentRequestRepository;
+
     const startDateTime = this.combineDateTime(createAppointmentDto.appointmentDate, createAppointmentDto.startTime);
     const endDateTime = this.combineDateTime(createAppointmentDto.appointmentDate, createAppointmentDto.endTime);
 
@@ -40,10 +48,12 @@ export class AppointmentsService {
       throw new BadRequestException("End time must be after start time.");
     }
 
-    const property = await this.propertiesRepository.findOne({
+    const property = await propertiesRepo.findOne({
       where: { id: createAppointmentDto.propertyId },
       relations: ["area", "city"]
     });
+
+    if(property.accessType == AccessType.DIRECT) throw new BadRequestException("Property is directly not available for booking");
     if (!property) throw new NotFoundException("Property not found");
     
     if (!property.city || !property.area) {
@@ -51,13 +61,13 @@ export class AppointmentsService {
     }
 
     // 2. Customer
-    const customer = await this.usersRepository.findOne({
+    const customer = await usersRepo.findOne({
       where: { id: createAppointmentDto.customerId },
     });
     if (!customer) throw new NotFoundException("Customer not found");
-    this.appointmentsRepository.find({where:{}})
+   
     // 3. Check for overlapping ACCEPTED or PENDING appointments
-    const overlapping = await this.appointmentsRepository
+    const overlapping = await appointmentsRepo
       .createQueryBuilder("appointment")
       .where("appointment.customer_id = :customerId", { customerId: createAppointmentDto.customerId })
       .andWhere("appointment.property_id = :propertyId", { propertyId: createAppointmentDto.propertyId })
@@ -79,7 +89,7 @@ export class AppointmentsService {
     }
    
 
-    let agents = await this.agentRepository.find({
+    let agents = await agentRepo.find({
       relations: ["cities", "areas", "user"],
       where: { 
         status: AgentApprovalStatus.APPROVED,
@@ -89,7 +99,7 @@ export class AppointmentsService {
     });
 
     if (agents.length === 0) {
-       agents = await this.agentRepository.find({
+       agents = await agentRepo.find({
         relations: ["cities", "areas", "user"],
         where: { 
           status: AgentApprovalStatus.APPROVED,
@@ -103,7 +113,7 @@ export class AppointmentsService {
     }
 
     // 5. Create the appointment (status: PENDING)
-    const appointment = this.appointmentsRepository.create({
+    const appointment = appointmentsRepo.create({
       ...createAppointmentDto,
       property,
       customer,
@@ -111,27 +121,27 @@ export class AppointmentsService {
       status: AppointmentStatus.PENDING,
     });
 
-    const savedAppointment = await this.appointmentsRepository.save(appointment);
+    const savedAppointment = await appointmentsRepo.save(appointment);
 
     // 6. Create agent requests & send notifications
     const agentRequests = [];
 
     for (const agent of agents) {
       // Create agent appointment request
-      const request = this.agentAppointmentRequestRepository.create({
+      const request = agentRequestRepo.create({
         appointment: savedAppointment,
         agent: agent.user,
         // Use agent.user (User entity) not agent (Agent entity)
         status: AppointmentStatus.PENDING,
       });
 
-      const savedRequest = await this.agentAppointmentRequestRepository.save(request);
+      const savedRequest = await agentRequestRepo.save(request);
       agentRequests.push(savedRequest);
 
       // Send notification to agent
       await this.notificationsService.createNotification({
         userId: agent.user.id,
-        type: NotificationType.SYSTEM,
+        type: NotificationType.APPOINTMENT_NEW,
         title: "New Appointment Request",
         message: "A customer wants to visit a property in your area. Please accept or reject the request.",
         relatedId: savedAppointment.id,
@@ -142,7 +152,7 @@ export class AppointmentsService {
     // 7. If no agents were matched, update appointment status
     if (agentRequests.length === 0) {
       appointment.status = AppointmentStatus.REJECTED;
-      await this.appointmentsRepository.save(appointment);
+      await appointmentsRepo.save(appointment);
 
       throw new NotFoundException("No agents available for this property location.");
     }
@@ -150,7 +160,7 @@ export class AppointmentsService {
     // 8. Notify customer
     await this.notificationsService.createNotification({
       userId: customer.id,
-      type: NotificationType.APPOINTMENT_REMINDER,
+      type: NotificationType.APPOINTMENT_NEW,
       title: "Appointment Created",
       message: "Your appointment request was sent to agents in the area.",
       relatedId: savedAppointment.id,
@@ -159,9 +169,9 @@ export class AppointmentsService {
 
     // 9. Notify admin
     await this.notificationsService.notifyUserType(UserType.ADMIN, {
-      type: NotificationType.SYSTEM,
-      title: "New Appointment Created",
-      message: `A customer created an appointment for property: ${property.title}`,
+      type: NotificationType.APPOINTMENT_NEW,
+      title: "تم إنشاء موعد جديد",
+      message: `قام عميل بإنشاء موعد للعقار: ${property.title}`,
       relatedId: savedAppointment.id,
       channel: NotificationChannel.IN_APP,
     });
@@ -247,18 +257,18 @@ export class AppointmentsService {
       // Customer notification
       await this.notificationsService.createNotification({
         userId: appointment.customer.id,
-        type: NotificationType.APPOINTMENT_REMINDER,
-        title: "Agent Accepted Appointment",
-        message: `Agent ${request.agent.fullName} accepted your appointment request.`,
+        type: NotificationType.APPOINTMENT_ACCEPTED,
+        title: "وافق الوكيل على الموعد",
+        message: `وافق الوكيل ${request.agent.fullName} على طلب موعدك.`,
         relatedId: appointment.id,
         channel: NotificationChannel.IN_APP,
       });
 
       // Notify admin
       await this.notificationsService.notifyUserType(UserType.ADMIN, {
-        type: NotificationType.SYSTEM,
-        title: "Appointment Assigned",
-        message: `Appointment has been assigned to agent ${request.agent.fullName}.`,
+        type: NotificationType.APPOINTMENT_ACCEPTED,
+        title: "تم تعيين الموعد",
+        message: `تم تعيين الموعد للوكيل ${request.agent.fullName}.`,
         relatedId: appointment.id,
         channel: NotificationChannel.IN_APP,
       });
@@ -427,9 +437,9 @@ export class AppointmentsService {
     // Notify the customer about the assigned agent
     await this.notificationsService.createNotification({
       userId: appointment.customer.id,
-      type: NotificationType.APPOINTMENT_REMINDER,
-      title: 'Agent Assigned to Your Appointment',
-      message: `Agent ${agent.fullName} has been assigned to your property viewing appointment.`,
+      type: NotificationType.APPOINTMENT_ACCEPTED,
+      title: 'تم تعيين وكيل لموعدك',
+      message: `تم تعيين الوكيل ${agent.fullName} لموعد معاينة العقار الخاص بك.`,
       relatedId: appointment.id,
       channel: NotificationChannel.IN_APP,
     });
@@ -437,9 +447,9 @@ export class AppointmentsService {
     // Notify the agent about the new assignment
     await this.notificationsService.createNotification({
       userId: agent.id,
-      type: NotificationType.APPOINTMENT_REMINDER,
-      title: 'You Have Been Assigned to a New Appointment',
-      message: `You have been assigned to an appointment with the client ${appointment.customer.fullName}.`,
+      type: NotificationType.APPOINTMENT_NEW,
+      title: 'تم تعيينك لموعد جديد',
+      message: `تم تعيينك لموعد مع العميل ${appointment.customer.fullName}.`,
       relatedId: appointment.id,
       channel: NotificationChannel.IN_APP,
     });
@@ -674,18 +684,18 @@ export class AppointmentsService {
             const visitAmount = agent.visitAmount || 0;
             await this.notificationsService.createNotification({
               userId: result.appointment.agent.id,
-              type: NotificationType.SYSTEM,
-              title: 'Commission Added',
-              message: `SAR ${visitAmount} has been added to your wallet for completing appointment #${result.appointment.id}. You now have SAR ${agent.walletBalance} available in your wallet.`,
+              type: NotificationType.PAYMENT_SUCCESS,
+              title: 'تم إضافة العمولة',
+              message: `تم إضافة ${visitAmount} ريال سعودي إلى محفظتك لإكمال الموعد #${result.appointment.id}. لديك الآن ${agent.walletBalance} ريال سعودي متاح في محفظتك.`,
               relatedId: result.appointment.id,
               channel: NotificationChannel.IN_APP,
             });
 
             // Also notify admin about the commission payout
             await this.notificationsService.notifyUserType(UserType.ADMIN, {
-              type: NotificationType.SYSTEM,
-              title: 'Agent Commission Paid',
-              message: `Agent ${agent.user.fullName} received SAR ${visitAmount} commission for completed appointment #${result.appointment.id}`,
+              type: NotificationType.PAYMENT_SUCCESS,
+              title: 'تم دفع عمولة الوكيل',
+              message: `استلم الوكيل ${agent.user.fullName} عمولة بقيمة ${visitAmount} ريال سعودي عن الموعد المكتمل #${result.appointment.id}`,
               relatedId: result.appointment.id,
               channel: NotificationChannel.IN_APP,
             });
@@ -703,4 +713,77 @@ export class AppointmentsService {
     };
   }
 
+  async createWithRegistration(dto: BookWithRegistrationDto): Promise<Appointment> {
+    return this.appointmentsRepository.manager.transaction(async (manager) => {
+      // 1. Check if user exists
+      const usersRepo = manager.getRepository(User);
+      let user = await usersRepo.findOne({
+        where: [{ email: dto.email }, { phoneNumber: dto.phoneNumber }],
+      });
+
+      if (user) {
+        throw new ConflictException('User with this email or phone number already exists.');
+      }
+
+      // 2. Create new user
+      const passwordHash = dto.password ? await bcrypt.hash(dto.password, 12) : null;
+      
+      user = usersRepo.create({
+        email: dto.email,
+        phoneNumber: dto.phoneNumber,
+        fullName: dto.fullName,
+        passwordHash,
+        userType: UserType.CUSTOMER,
+        profilePhotoUrl: dto.profilePhotoUrl,
+        isActive: true,
+        verificationStatus: VerificationStatus.PENDING
+      });
+      
+      await usersRepo.save(user);
+
+      // 3. Create appointment
+      const createAppointmentDto: CreateAppointmentDto = {
+        ...dto,
+        customerId: user.id,
+      };
+
+      // Pass manager to create method to continue in the same transaction
+      return this.create(createAppointmentDto, manager);
+    });
+  }
+
+  async getAvailableSlots(propertyId: number, dateString?: string): Promise<string[]> {
+    const date = dateString || new Date().toISOString().split('T')[0];
+    
+    const property = await this.propertiesRepository.findOne({ where: { id: propertyId } });
+    if (!property) throw new NotFoundException('Property not found');
+    if(property.accessType == AccessType.DIRECT) throw new BadRequestException("Property is directly not available for booking");
+
+    // Define working hours (e.g., 9 AM to 6 PM)
+    const startHour = 9;
+    const endHour = 21;
+    const slots: string[] = [];
+
+    // Simple slot generation
+    for (let h = startHour; h < endHour; h++) {
+      const slot = `${h.toString().padStart(2, '0')}:00`;
+      slots.push(slot);
+    }
+
+    // Filter out booked slots
+    const bookedAppointments = await this.appointmentsRepository.find({
+      where: {
+        property: { id: propertyId },
+        appointmentDate: date,
+        status: In([AppointmentStatus.PENDING, AppointmentStatus.ACCEPTED, AppointmentStatus.CONFIRMED]),
+      },
+    });
+
+    const availableSlots = slots.filter(slot => {
+      const isBooked = bookedAppointments.some(ppt => ppt.startTime === slot);
+      return !isBooked;
+    });
+
+    return availableSlots;
+  }
 }
