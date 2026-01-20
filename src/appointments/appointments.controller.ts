@@ -1,7 +1,7 @@
 import { Controller, Get, Post, Body, Patch, Param, Delete, Query, UseGuards, Req, ParseIntPipe, UseFilters, UnauthorizedException } from '@nestjs/common';
 import { HttpStatusFilter } from 'common/http-status.filter';
 import { AppointmentsService } from './appointments.service';
-import { CreateAppointmentDto, UpdateAppointmentDto, AssignAgentDto, UpdateStatusDto, AppointmentQueryDto } from '../../dto/appointments.dto';
+import { CreateAppointmentDto, UpdateAppointmentDto, AssignAgentDto, UpdateStatusDto, AppointmentQueryDto, BookWithRegistrationDto, AvailabilityQueryDto } from '../../dto/appointments.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -39,6 +39,18 @@ export class AppointmentsController {
     console.log(createAppointmentDto.customerId)
     return this.appointmentsService.create(createAppointmentDto);
   }
+
+  @Post('book-with-registration')
+  async createWithRegistration(@Body() dto: BookWithRegistrationDto) {
+    return this.appointmentsService.createWithRegistration(dto);
+  }
+
+  @Get('available-slots')
+  async getAvailableSlots(@Query() query: AvailabilityQueryDto) {
+    return this.appointmentsService.getAvailableSlots(query.propertyId, query.date);
+  }
+
+
 
   @Get()
   @Roles(UserType.ADMIN, UserType.AGENT, UserType.QUALITY, UserType.CUSTOMER)

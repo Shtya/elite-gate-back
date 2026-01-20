@@ -1,5 +1,6 @@
 import { IsNotEmpty, IsNumber, IsEnum, IsOptional, IsString, IsDateString } from 'class-validator';
 import { AppointmentStatus, CreatedChannel } from '../entities/global.entity';
+import { Type } from 'class-transformer';
 
 export class CreateAppointmentDto {
   @IsNotEmpty()
@@ -113,4 +114,36 @@ export class AppointmentQueryDto {
   @IsOptional()
   @IsNumber()
   limit?: number;
+}
+
+export class BookWithRegistrationDto extends CreateAppointmentDto {
+  @IsNotEmpty()
+  @IsString()
+  phoneNumber: string;
+
+  @IsNotEmpty()
+  @IsString()
+  email: string;
+
+  @IsNotEmpty()
+  @IsString()
+  fullName: string;
+
+  @IsOptional()
+  @IsString()
+  password?: string;
+
+  @IsOptional()
+  @IsString()
+  profilePhotoUrl?: string;
+}
+
+export class AvailabilityQueryDto {
+  @IsNotEmpty()
+  @Type(() => Number)
+  propertyId: number;
+
+  @IsOptional()
+  @IsDateString()
+  date?: string;
 }

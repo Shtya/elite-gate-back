@@ -114,9 +114,9 @@ export class AgentsService {
 
     if (!byAdmin) {
       await this.notificationsService.notifyUserType(UserType.ADMIN, {
-        type: NotificationType.SYSTEM,
-        title: "New Agent Application",
-        message: `Agent ${user.fullName} submitted application.`,
+        type: NotificationType.AGENT_NEW_REGISTRATION,
+        title: "طلب تسجيل وكيل جديد",
+        message: `قدم الوكيل ${user.fullName} طلب تسجيل.`,
         channel: NotificationChannel.IN_APP,
       });
     }
@@ -250,9 +250,9 @@ export class AgentsService {
     }
     await this.notificationsService.createNotification({
       userId: agent.user.id,
-      type: NotificationType.SYSTEM,
-      title: 'Agent Registration Decision',
-      message: `Your agent registration request has been ${approveAgentDto.status === 'approved' ? 'approved' : 'rejected'}`,
+      type: approveAgentDto.status === 'approved' ? NotificationType.AGENT_APPROVED : NotificationType.AGENT_REJECTED,
+      title: 'قرار تسجيل الوكيل',
+      message: `تم ${approveAgentDto.status === 'approved' ? 'قبول' : 'رفض'} طلب تسجيل وكالتك`,
       channel: NotificationChannel.IN_APP,
     });
 
@@ -580,9 +580,9 @@ async registerAgent(
   if (adminUsers.length > 0) {
     await this.notificationsService.createNotification({
       userId: adminUsers[0].id,
-      type: NotificationType.SYSTEM,
-      title: "New Agent Registered",
-      message: `A new agent named ${user.fullName} has registered on the platform.`,
+      type: NotificationType.AGENT_NEW_REGISTRATION,
+      title: "تم تسجيل وكيل جديد",
+      message: `قام وكيل جديد باسم ${user.fullName} بالتسجيل في المنصة.`,
       channel: NotificationChannel.IN_APP,
     });
   }

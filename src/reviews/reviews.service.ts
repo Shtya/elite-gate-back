@@ -72,18 +72,18 @@ export class ReviewsService {
     // Notify the agent about a new review
     await this.notificationsService.createNotification({
       userId: createDto.agentId,
-      type: NotificationType.RATING_REQUEST,
-      title: 'New Review from a Client',
-      message: `You have received a new review from the client ${appointment.customer.fullName}.`,
+      type: NotificationType.REVIEW_SUBMITTED,
+      title: 'تقييم جديد من عميل',
+      message: `لقد استلمت تقييمًا جديدًا من العميل ${appointment.customer.fullName}.`,
       relatedId: savedReview.id,
       channel: NotificationChannel.IN_APP,
     });
 
     // Notify the admin about the new review
     await this.notificationsService.notifyUserType(UserType.ADMIN, {
-      type: NotificationType.SYSTEM,
-      title: 'New Agent Review',
-      message: `A new review has been submitted for the agent by the client ${appointment.customer.fullName}.`,
+      type: NotificationType.REVIEW_SUBMITTED,
+      title: 'تقييم وكيل جديد',
+      message: `تم تقديم تقييم جديد للوكيل بواسطة العميل ${appointment.customer.fullName}.`,
       relatedId: savedReview.id,
       channel: NotificationChannel.IN_APP,
     });
@@ -131,9 +131,9 @@ export class ReviewsService {
     // Notify the customer about the agent’s review
     await this.notificationsService.createNotification({
       userId: appointment.customer.id,
-      type: NotificationType.RATING_REQUEST,
-      title: 'Review from Agent',
-      message: `Agent ${appointment.agent.fullName} has submitted a review about your interaction.`,
+      type: NotificationType.REVIEW_SUBMITTED,
+      title: 'تقييم من الوكيل',
+      message: `قدم الوكيل ${appointment.agent.fullName} تقييمًا حول تفاعلك.`,
       relatedId: savedReview.id,
       channel: NotificationChannel.IN_APP,
     });
