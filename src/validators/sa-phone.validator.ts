@@ -12,7 +12,7 @@ export function IsSaudiPhoneNumber(validationOptions?: ValidationOptions) {
           return typeof value === 'string' && /^05\d{8}$/.test(value);
         },
         defaultMessage(): string {
-          return 'Phone number must start with 05 and be 10 digits long';
+          return 'يجب أن يبدأ رقم الهاتف بـ 05 ويتكون من 10 أرقام';
         },
       },
     });

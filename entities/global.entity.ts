@@ -136,10 +136,11 @@ export enum TimelineEventType {
 }
 
 export enum RatingDimension {
-  COOPERATION = 'cooperation',
-  COMMUNICATION = 'communication',
+  PUNCTUALITY = 'punctuality',
+  ACCURACY = 'accuracy',
   PROFESSIONALISM = 'professionalism',
-  CLARITY = 'clarity',
+  TRUSTWORTHINESS = 'trustworthiness',
+  RECOMMENDATION = 'recommendation', // derived from NPS-like score
 }
 
 export enum PaymentStatus {
@@ -1622,7 +1623,7 @@ export class CustomerReview extends CoreEntity {
   @Column({ name: 'agent_id', type: 'int' })
   agentId: number;
 
-  @Column({ type: 'smallint' })
+  @Column({ type: 'decimal', precision: 3, scale: 1,nullable:true })
   rating: number; // 1-5
 
   @Column({
@@ -1668,7 +1669,7 @@ export class AgentReview extends CoreEntity {
   @JoinColumn({ name: 'customer_id' })
   customer: User;
 
-  @Column({ type: 'smallint' })
+  @Column({ type: 'decimal', precision: 3, scale: 1,nullable:true  })
   rating: number;
 
   @Column({
