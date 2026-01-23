@@ -1,9 +1,9 @@
-import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { CustomerReview, AgentReview, CustomerReviewDimension, AgentReviewDimension, Appointment, User, RatingDimension, NotificationType, NotificationChannel, UserType } from 'entities/global.entity';
-import { CreateCustomerReviewDto, CreateAgentReviewDto, UpdateReviewDto, ReviewQueryDto } from '../../dto/reviews.dto';
-import { NotificationsService } from 'src/notifications/notifications.service';
+import { CustomerReview, AgentReview, CustomerReviewDimension, AgentReviewDimension, Appointment, User, RatingDimension, NotificationType, NotificationChannel, UserType } from '../../entities/global.entity';
+import { CreateCustomerReviewDto, CreateAgentReviewDto, UpdateReviewDto, ReviewQueryDto, PunctualityStatus } from '../../dto/reviews.dto';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class ReviewsService {
@@ -47,19 +47,83 @@ export class ReviewsService {
       throw new NotFoundException('Agent not found');
     }
 
+    // Calculate rating and dimensions if specific fields are provided
+    let finalRating = createDto.rating || 0;
+    const generatedDimensions: { dimension: RatingDimension; score: number }[] = [];
+
+    if (createDto.punctuality || createDto.accuracy || createDto.professionalism || createDto.trustworthiness || createDto.recommendation) {
+      // 1. Punctuality
+      let punctualityScore = 0;
+      if (createDto.punctuality) {
+        switch (createDto.punctuality) {
+          case PunctualityStatus.COMMITTED:
+            punctualityScore = 5;
+            break;
+          case PunctualityStatus.SLIGHT_DELAY:
+            punctualityScore = 3;
+            break;
+          case PunctualityStatus.NOTICEABLE_DELAY:
+            punctualityScore = 1;
+            break;
+        }
+        generatedDimensions.push({ dimension: RatingDimension.PUNCTUALITY, score: punctualityScore });
+      }
+
+      // 2. Accuracy
+      if (createDto.accuracy) {
+        generatedDimensions.push({ dimension: RatingDimension.ACCURACY, score: createDto.accuracy });
+      }
+
+      // 3. Professionalism
+      if (createDto.professionalism) {
+        generatedDimensions.push({ dimension: RatingDimension.PROFESSIONALISM, score: createDto.professionalism });
+      }
+
+      // 4. Trustworthiness (Knowledge)
+      if (createDto.trustworthiness) {
+        generatedDimensions.push({ dimension: RatingDimension.TRUSTWORTHINESS, score: createDto.trustworthiness });
+      }
+
+      // 5. Recommendation
+      if (createDto.recommendation) {
+        let recScore = 1;
+        const val = createDto.recommendation;
+        if (val >= 9) recScore = 5;
+        else if (val >= 7) recScore = 4;
+        else if (val >= 6) recScore = 3;
+        else if (val >= 5) recScore = 2;
+        else recScore = 1;
+
+        generatedDimensions.push({ dimension: RatingDimension.RECOMMENDATION, score: recScore });
+      }
+
+      // Calculate Average for main rating
+      if (generatedDimensions.length > 0) {
+        const sum = generatedDimensions.reduce((acc, curr) => acc + curr.score, 0);
+        finalRating = sum / generatedDimensions.length;
+      }
+    }
+
+    if (finalRating === 0 && (!createDto.dimensions || createDto.dimensions.length === 0)) {
+        throw new BadRequestException('Rating or rating dimensions are required');
+    }
+
     const review = this.customerReviewRepository.create({
       appointment,
       customer: appointment.customer,
       agentId: createDto.agentId,
-      rating: createDto.rating,
+      rating: finalRating,
       reviewText: createDto.reviewText,
     });
 
     const savedReview = await this.customerReviewRepository.save(review);
 
-    // Save dimensions if provided
-    if (createDto.dimensions && createDto.dimensions.length > 0) {
-      const dimensions = createDto.dimensions.map(dim =>
+    // Save dimensions
+    // Combine generated dimensions with manually passed dimensions (if any, though uncommon to mix)
+    const dimensionsToSave = [...(createDto.dimensions || []), ...generatedDimensions.map(d => ({ dimension: d.dimension, score: d.score }))];
+    
+    if (dimensionsToSave.length > 0) {
+      const dimensions = dimensionsToSave.map(dim =>
         this.customerReviewDimensionRepository.create({
           review: savedReview,
           dimension: dim.dimension,
@@ -198,22 +262,26 @@ export class ReviewsService {
 
     // Calculate dimension averages
     const dimensionSums: { [key in RatingDimension]: number } = {
-      [RatingDimension.COOPERATION]: 0,
-      [RatingDimension.COMMUNICATION]: 0,
+      [RatingDimension.PUNCTUALITY]: 0,
+      [RatingDimension.ACCURACY]: 0,
       [RatingDimension.PROFESSIONALISM]: 0,
-      [RatingDimension.CLARITY]: 0,
+      [RatingDimension.TRUSTWORTHINESS]: 0,
+      [RatingDimension.RECOMMENDATION]: 0,
     };
     const dimensionCounts: { [key in RatingDimension]: number } = {
-      [RatingDimension.COOPERATION]: 0,
-      [RatingDimension.COMMUNICATION]: 0,
+      [RatingDimension.PUNCTUALITY]: 0,
+      [RatingDimension.ACCURACY]: 0,
       [RatingDimension.PROFESSIONALISM]: 0,
-      [RatingDimension.CLARITY]: 0,
+      [RatingDimension.TRUSTWORTHINESS]: 0,
+      [RatingDimension.RECOMMENDATION]: 0,
     };
 
     reviews.forEach(review => {
       review.dimensions.forEach(dimension => {
-        dimensionSums[dimension.dimension] += dimension.score;
-        dimensionCounts[dimension.dimension]++;
+        if (dimensionSums[dimension.dimension] !== undefined) {
+             dimensionSums[dimension.dimension] += dimension.score;
+             dimensionCounts[dimension.dimension]++;
+        }
       });
     });
 

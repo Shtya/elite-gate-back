@@ -10,6 +10,8 @@ import { NotificationsService } from '../notifications/notifications.service';
 import * as bcrypt from 'bcryptjs';
 import { RegisterDto } from '../../dto/auth.dto';
 
+import { ReviewsService } from '../reviews/reviews.service';
+
 @Injectable()
 export class AgentsService {
   constructor(
@@ -28,7 +30,7 @@ export class AgentsService {
 
     @InjectRepository(City)
     private cityRepository: Repository<City>,
-@InjectRepository(Area)
+    @InjectRepository(Area)
     private areaRepository: Repository<Area>,
     @InjectRepository(AgentAppointmentRequest)
     private agentAppointmentRepository: Repository<AgentAppointmentRequest>,
@@ -36,7 +38,99 @@ export class AgentsService {
     @InjectRepository(WalletTransaction)
     private walletTransactionRepository: Repository<WalletTransaction>,
     private notificationsService: NotificationsService,
+    private reviewsService: ReviewsService,
   ) {}
+
+  // ... (resolveCityAndAreaSelection and create remain same)
+
+  async findAll(query: AgentQueryDto): Promise<{ data: any[]; total: number }> {
+    const { status, cityId, page = 1, limit = 10 } = query;
+    const skip = (page - 1) * limit;
+
+    const where: any = {};
+    if (status) where.status = status;
+    if (cityId) where.city = { id: cityId };
+
+    const [data, total] = await this.agentsRepository.findAndCount({
+      where,
+      relations: ['user', 'city'],
+      skip,
+      take: limit,
+      order: { createdAt: 'DESC' },
+    });
+
+    // Attach rating summary to each agent
+    const agentsWithRatings = await Promise.all(data.map(async (agent) => {
+      const reviewSummary = await this.reviewsService.getAgentReviewSummary(agent.user.id);
+      return {
+        ...agent,
+        reviewSummary
+      };
+    }));
+
+    return { data: agentsWithRatings, total };
+  }
+
+  async findOne(id: number): Promise<any> {
+    const agent = await this.agentsRepository.findOne({
+      where: { id },
+      relations: ['user', 'cities', 'areas', 'updatedBy'],
+    });
+
+    if (!agent) {
+      throw new NotFoundException('Agent not found');
+    }
+
+    const reviewSummary = await this.reviewsService.getAgentReviewSummary(agent.user.id);
+
+    // Run all counts in parallel
+    const [
+      appointmentAccepted,
+      appointmentExpired,
+      appointmentCancelled,
+      appointmentConfirmed,
+      appointmentCompleted,
+      appointmentRejected,
+    ] = await Promise.all([
+      this.agentAppointmentRepository.countBy({
+        status: AppointmentStatus.ACCEPTED,
+        agent: { id },
+      }),
+      this.agentAppointmentRepository.countBy({
+        status: AppointmentStatus.EXPIRED,
+        agent: { id },
+      }),
+      this.agentAppointmentRepository.countBy({
+        status: AppointmentStatus.CANCELLED,
+        agent: { id },
+      }),
+      this.agentAppointmentRepository.countBy({
+        status: AppointmentStatus.CONFIRMED,
+        agent: { id },
+      }),
+      this.agentAppointmentRepository.countBy({
+        status: AppointmentStatus.COMPLETED,
+        agent: { id },
+      }),
+      this.agentAppointmentRepository.countBy({
+        status: AppointmentStatus.REJECTED,
+        agent: { id },
+      }),
+    ]);
+
+    return {
+      agent,
+      stats: {
+        accepted: appointmentAccepted,
+        expired: appointmentExpired,
+        cancelled: appointmentCancelled,
+        confirmed: appointmentConfirmed,
+        completed: appointmentCompleted,
+        rejected: appointmentRejected,
+      },
+      reviewSummary,
+    };
+  }
   private async resolveCityAndAreaSelection(cityIds: any[], areaIds: any[]) {
     let cities: City[];
     let areas: Area[] = [];
@@ -127,82 +221,8 @@ export class AgentsService {
 
 
 
-  async findAll(query: AgentQueryDto): Promise<{ data: Agent[]; total: number }> {
-    const { status, cityId, page = 1, limit = 10 } = query;
-    const skip = (page - 1) * limit;
-
-    const where: any = {};
-    if (status) where.status = status;
-    if (cityId) where.city = { id: cityId };
-
-    const [data, total] = await this.agentsRepository.findAndCount({
-      where,
-      relations: ['user', 'city'],
-      skip,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
-
-    return { data, total };
-  }
-
-  async findOne(id: number): Promise<any> {
-    const agent = await this.agentsRepository.findOne({
-      where: { id },
-      relations: ['user', 'cities', 'areas', 'updatedBy'],
-    });
-
-    if (!agent) {
-      throw new NotFoundException('Agent not found');
-    }
-
-    // Run all counts in parallel
-    const [
-      appointmentAccepted,
-      appointmentExpired,
-      appointmentCancelled,
-      appointmentConfirmed,
-      appointmentCompleted,
-      appointmentRejected,
-    ] = await Promise.all([
-      this.agentAppointmentRepository.countBy({
-        status: AppointmentStatus.ACCEPTED,
-        agent: { id },
-      }),
-      this.agentAppointmentRepository.countBy({
-        status: AppointmentStatus.EXPIRED,
-        agent: { id },
-      }),
-      this.agentAppointmentRepository.countBy({
-        status: AppointmentStatus.CANCELLED,
-        agent: { id },
-      }),
-      this.agentAppointmentRepository.countBy({
-        status: AppointmentStatus.CONFIRMED,
-        agent: { id },
-      }),
-      this.agentAppointmentRepository.countBy({
-        status: AppointmentStatus.COMPLETED,
-        agent: { id },
-      }),
-      this.agentAppointmentRepository.countBy({
-        status: AppointmentStatus.REJECTED,
-        agent: { id },
-      }),
-    ]);
-
-    return {
-      agent,
-      stats: {
-        accepted: appointmentAccepted,
-        expired: appointmentExpired,
-        cancelled: appointmentCancelled,
-        confirmed: appointmentConfirmed,
-        completed: appointmentCompleted,
-        rejected: appointmentRejected,
-      },
-    };
-  }
+  // Duplicate findAll removed
+  // Duplicate findOne removed
 
   async update(id: number, dto: UpdateAgentDto): Promise<Agent> {
     const agent = await this.agentsRepository.findOne({
@@ -259,7 +279,7 @@ export class AgentsService {
     return this.agentsRepository.save(agent);
   }
 
-  async findByUserId(userId: number): Promise<Agent> {
+  async findByUserId(userId: number): Promise<any> {
     const agent = await this.agentsRepository.findOne({
       where: { user: { id: userId } },
       relations: ['user', 'city'],
@@ -269,7 +289,12 @@ export class AgentsService {
       throw new NotFoundException('Agent not found for this user');
     }
 
-    return agent;
+    const reviewSummary = await this.reviewsService.getAgentReviewSummary(agent.user.id);
+
+    return {
+      ...agent,
+      reviewSummary
+    };
   }
   async getDashboard(agentId: number, page: number = 1, limit: number = 10, filters?: any) {
     const agent = await this.agentsRepository.findOne({
@@ -280,6 +305,8 @@ export class AgentsService {
     if (!agent) {
       throw new NotFoundException('Agent not found');
     }
+
+    const reviewSummary = await this.reviewsService.getAgentReviewSummary(agentId);
 
     // Run all queries in parallel for better performance
     const [
@@ -328,11 +355,6 @@ export class AgentsService {
       this.getPayoutHistory(agent.id, page, limit, filters)
     ]);
 
-    // Calculate average rating
-    const averageRating = reviews.length > 0
-      ? reviews.reduce((sum, r) => sum + r.rating, 0) / reviews.length
-      : 0;
-
     return {
       agent: {
         id: agent.id,
@@ -351,12 +373,16 @@ export class AgentsService {
 
       overview: {
         totalAppointments,
-        averageRating,
+        // averageRating: reviewSummary.averageRating,
+        // Or keep structure compatible if FE expects simple number
+        averageRating: reviewSummary.averageRating,
+        reviewSummary, // Add full summary
         walletBalance: agent.walletBalance,
         availableForPayout: agent.walletBalance,
         totalEarned: agent.totalEarned,
         totalPaid: agent.totalPaid,
       },
+
 
       statistics: {
         // Appointment statistics
@@ -869,4 +895,8 @@ async updateAgentVisitAmount(
     return updatedAgent;
   });
 }
+
+  async getAgentReviewSummary(userId: number) {
+    return this.reviewsService.getAgentReviewSummary(userId);
+  }
 }

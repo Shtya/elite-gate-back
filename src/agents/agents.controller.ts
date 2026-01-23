@@ -113,11 +113,19 @@ export class AgentsController {
   
     const [records, total] = await qb.getManyAndCount();
   
+    const recordsWithRatings = await Promise.all(records.map(async (agent) => {
+      const reviewSummary = await this.agentsService.getAgentReviewSummary(agent.user.id);
+      return {
+        ...agent,
+        reviewSummary
+      };
+    }));
+
     return {
       total_records: total,
       current_page: page,
       per_page: limit,
-      records,
+      records: recordsWithRatings,
     };
   }
   

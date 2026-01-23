@@ -2,116 +2,116 @@ import { IsEnum, IsNotEmpty, IsOptional, IsString, IsBoolean, IsNumber, IsEmail,
 import { UserType, VerificationStatus } from '../entities/global.entity';
 
 export class CreateUserDto {
-  @IsEmail()
-  @IsNotEmpty()
+  @IsEmail({}, { message: "البريد الإلكتروني غير صالح" })
+  @IsNotEmpty({ message: "هذا الحقل مطلوب" })
   email: string;
 
-  @IsString()
-  @IsNotEmpty()
+  @IsString({ message: "يجب أن يكون نصاً" })
+  @IsNotEmpty({ message: "هذا الحقل مطلوب" })
   fullName: string;
 
   // Admin-created users should set an initial password
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(6)
+  @IsString({ message: 'يجب أن يكون نصاً' })
+  @IsNotEmpty({ message: 'هذا الحقل مطلوب' })
+  @MinLength(6, { message: 'يجب أن لا يقل عن 6 حرفاً' })
   password: string;
 
-  @IsEnum(UserType)
+  @IsEnum(UserType, { message: 'قيمة غير صالحة' })
   userType: UserType;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'يجب أن يكون نصاً' })
   phoneNumber?: string;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'يجب أن يكون نصاً' })
   profilePhotoUrl?: string;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'يجب أن يكون نصاً' })
   nationalIdUrl?: string;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'يجب أن يكون نصاً' })
   residencyIdUrl?: string;
 }
 
 export class UpdateUserDto {
   @IsOptional()
-  @IsEmail()
+  @IsEmail({}, { message: 'البريد الإلكتروني غير صالح' })
   email?: string;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'يجب أن يكون نصاً' })
   fullName?: string;
 
   @IsOptional()
-  @IsEnum(UserType)
+  @IsEnum(UserType, { message: 'قيمة غير صالحة' })
   userType?: UserType;
 
   @IsOptional()
-  @IsString()
-  @MinLength(6)
+  @IsString({ message: 'يجب أن يكون نصاً' })
+  @MinLength(6, { message: 'يجب أن لا يقل عن 6 حرفاً' })
   password?: string;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'يجب أن يكون نصاً' })
   phoneNumber?: string;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'يجب أن يكون نصاً' })
   profilePhotoUrl?: string;
 
-  @IsOptional() @IsString() nationalIdUrl?: string;
-  @IsOptional() @IsString() residencyIdUrl?: string;
+  @IsOptional() @IsString({ message: 'يجب أن يكون نصاً' }) nationalIdUrl?: string;
+  @IsOptional() @IsString({ message: 'يجب أن يكون نصاً' }) residencyIdUrl?: string;
 
   @IsOptional()
-  @IsEnum(VerificationStatus)
+  @IsEnum(VerificationStatus, { message: 'قيمة غير صالحة' })
   verificationStatus?: VerificationStatus;
 
   @IsOptional()
-  @IsBoolean()
+  @IsBoolean({ message: 'يجب أن يكون قيمة منطقية' })
   isActive?: boolean;
 }
 
 export class VerifyUserDto {
-  @IsEnum(VerificationStatus)
+  @IsEnum(VerificationStatus, { message: 'قيمة غير صالحة' })
   status: VerificationStatus;
 
   @IsOptional()
-  @IsString()
+  @IsString({ message: 'يجب أن يكون نصاً' })
   notes?: string;
 }
 
 export class UserQueryDto {
   @IsOptional()
-  @IsEnum(UserType)
+  @IsEnum(UserType, { message: 'قيمة غير صالحة' })
   userType?: UserType;
 
   @IsOptional()
-  @IsEnum(VerificationStatus)
+  @IsEnum(VerificationStatus, { message: 'قيمة غير صالحة' })
   verificationStatus?: VerificationStatus;
 
   @IsOptional()
-  @IsBoolean()
+  @IsBoolean({ message: 'يجب أن يكون قيمة منطقية' })
   isActive?: boolean;
 
   @IsOptional()
-  @IsNumber()
+  @IsNumber({}, { message: 'يجب أن يكون رقماً' })
   page?: number;
 
   @IsOptional()
-  @IsNumber()
+  @IsNumber({}, { message: 'يجب أن يكون رقماً' })
   limit?: number;
 }
 export class CreateContactUsDto {
-  @IsNotEmpty()
+  @IsNotEmpty({ message: 'هذا الحقل مطلوب' })
 name: string;
 
-@IsEmail()
-@MaxLength(255)
+@IsEmail({}, { message: 'البريد الإلكتروني غير صالح' })
+@MaxLength(255, { message: 'يجب أن لا يزيد عن 255 حرفاً' })
 email: string;
 
-@IsNotEmpty()
+@IsNotEmpty({ message: 'هذا الحقل مطلوب' })
 message: string;
 }

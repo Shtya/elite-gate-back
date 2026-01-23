@@ -2,7 +2,6 @@ import { IsEmail, IsEnum, IsNotEmpty, IsNumber, IsOptional,  IsString, MinLength
 import { UserType } from '../entities/global.entity';
 import { Optional } from '@nestjs/common';
 import { Type } from 'class-transformer';
-import { IsSaudiPhoneNumber } from 'src/validators/sa-phone.validator';
 
 export class LoginDto {
   @IsOptional()
@@ -10,7 +9,6 @@ export class LoginDto {
   email?: string;
 
   @IsOptional()
-  @IsSaudiPhoneNumber()
   phoneNumber?: string;
 
   @IsString()
@@ -35,7 +33,6 @@ export class RegisterDto {
 
   // Optional now; we no longer use phone for auth
   @IsOptional()
-  @IsSaudiPhoneNumber()
 
   phoneNumber: string;
 
@@ -61,7 +58,6 @@ export class VerifyOtpDto {
   email?: string;
 
   @IsOptional()
-  @IsSaudiPhoneNumber()
   phoneNumber?: string;
 
   @IsString()
@@ -91,7 +87,6 @@ export class ForgotPasswordDto {
   
 }
 export class ForgotPasswordPhoneDto {
-  @IsSaudiPhoneNumber()
   phoneNumber: string;
 }
 
@@ -107,7 +102,6 @@ export class ResetPasswordDto {
 }
 export class ResetPasswordPhoneDto {
 
-  @IsSaudiPhoneNumber()
   phoneNumber: string;
   @IsString()
   otp: string;
@@ -145,13 +139,11 @@ export class VerifyEmailOtpDto {
 }
 
 export class VerifyPhoneOtpDto {
-  @IsSaudiPhoneNumber()
   phoneNumber: string;
 
   @IsString()
   otp: string;
 }
 export class PhoneLoginDto {
-  @IsSaudiPhoneNumber()
   phoneNumber: string;
 }

@@ -1,8 +1,9 @@
 import { Injectable, NotFoundException, ConflictException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
-import { Appointment, AppointmentStatus, User, VerificationStatus } from 'entities/global.entity';
-import { CreateUserDto, UpdateUserDto, VerifyUserDto, UserQueryDto } from 'dto/users.dto';
+import { ReviewsService } from '../reviews/reviews.service';
+import { Appointment, AppointmentStatus, User, VerificationStatus, UserType } from '../../entities/global.entity';
+import { CreateUserDto, UpdateUserDto, VerifyUserDto, UserQueryDto } from '../../dto/users.dto';
 import * as bcrypt from 'bcryptjs';
 
 @Injectable()
@@ -13,6 +14,7 @@ export class UsersService {
     @InjectRepository(Appointment)
 
     public appointmentsRepository: Repository<Appointment>,
+    private reviewsService: ReviewsService,
   ) {}
 
   async create(createUserDto: CreateUserDto): Promise<User> {
@@ -92,6 +94,11 @@ export class UsersService {
         customer: { id },
       }),
     ]);
+
+    let reviewSummary = null;
+    if (user.userType === UserType.AGENT) {
+      reviewSummary = await this.reviewsService.getAgentReviewSummary(user.id);
+    }
   
     return {
       ...user,
@@ -104,6 +111,7 @@ export class UsersService {
         completed: appointmentCompleted,
         rejected: appointmentRejected,
       },
+      reviewSummary, // Include review summary if agent
     };
   }
   
