@@ -14,6 +14,9 @@ export class MailService {
   private initializeTransporter() {
     const emailUser = process.env.EMAIL_USER;
     const emailPass = process.env.EMAIL_PASS;
+    const emailHost = process.env.EMAIL_HOST || 'smtp.mailgun.org';
+    const emailPort = parseInt(process.env.EMAIL_PORT, 10) || 587;
+    const emailSecure = process.env.EMAIL_SECURE === 'true'; // true for 465, false for other ports
 
     if (!emailUser || !emailPass) {
       this.logger.warn('⚠️ Email credentials not found. Email service will be disabled.');
@@ -33,14 +36,16 @@ export class MailService {
 
     try {
       this.transporter = nodemailer.createTransport({
-        service: 'gmail',
+        host: emailHost,
+        port: emailPort,
+        secure: emailSecure, // true for 465, false for other ports
         auth: {
           user: emailUser,
           pass: emailPass,
         },
       });
 
-      this.logger.log('✅ Email service initialized successfully');
+      this.logger.log(`✅ Email service initialized successfully with host: ${emailHost}`);
     } catch (error) {
       this.logger.error('❌ Failed to initialize email service:', error);
       throw new Error(`Email service initialization failed: ${error.message}`);

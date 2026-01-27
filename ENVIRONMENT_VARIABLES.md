@@ -5,6 +5,7 @@
 Copy and paste these exact values into your Vercel project settings:
 
 ### Database Configuration
+
 ```
 DATABASE_HOST=aws-0-eu-central-1.pooler.supabase.com
 DATABASE_PORT=5432
@@ -14,6 +15,7 @@ DATABASE_NAME=elite-gate
 ```
 
 ### JWT Configuration
+
 ```
 JWT_SECRET=my-secret-key
 JWT_EXPIRE=2d
@@ -21,12 +23,17 @@ JWT_REFRESH_EXPIRE=30d
 ```
 
 ### Email Configuration
+
 ```
-EMAIL_USER=ahmedabdelrhman083@gmail.com
-EMAIL_PASS=joef jjeb mmgt gkns
+EMAIL_USER=postmaster@your-domain.mailgun.org
+EMAIL_PASS=your-mailgun-password
+EMAIL_HOST=smtp.mailgun.org
+EMAIL_PORT=587
+EMAIL_SECURE=false
 ```
 
 ### Application Configuration
+
 ```
 NODE_ENV=production
 PORT=3000
@@ -34,6 +41,7 @@ FRONTEND_URL=https://your-frontend-domain.vercel.app
 ```
 
 ### Optional Support Configuration
+
 ```
 SUPPORT_PHONE=+966500000000
 SUPPORT_EMAIL=support@realestate.com
@@ -55,6 +63,7 @@ SUPPORT_EMAIL=support@realestate.com
 ## Verification
 
 After adding all variables, redeploy:
+
 1. Go to **Deployments** tab
 2. Click on latest deployment
 3. Click **⋮ menu** → **Redeploy**
@@ -63,6 +72,7 @@ After adding all variables, redeploy:
 ## Development vs Production
 
 The app now includes:
+
 - **Development fallbacks** for local testing
 - **Production optimizations** for Vercel
 - **Error handling** for missing variables
