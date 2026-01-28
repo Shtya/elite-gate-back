@@ -1,54 +1,60 @@
 
 import { Injectable, Logger } from '@nestjs/common';
-import * as nodemailer from 'nodemailer';
+import FormData from 'form-data';
+import Mailgun from 'mailgun.js';
 
 @Injectable()
 export class MailService {
   private readonly logger = new Logger(MailService.name);
-  public transporter: nodemailer.Transporter;
+  private mailgunClient: any;
+  private domain: string;
 
   constructor() {
-    this.initializeTransporter();
+    this.initializeClient();
   }
 
-  private initializeTransporter() {
-    const emailUser = process.env.EMAIL_USER;
-    const emailPass = process.env.EMAIL_PASS;
-    const emailHost = process.env.EMAIL_HOST || 'smtp.mailgun.org';
-    const emailPort = parseInt(process.env.EMAIL_PORT, 10) || 587;
-    const emailSecure = process.env.EMAIL_SECURE === 'true'; // true for 465, false for other ports
+  private initializeClient() {
+    const apiKey = process.env.API_KEY;
+    const domain = process.env.MAILGUN_DOMAIN;
 
-    if (!emailUser || !emailPass) {
-      this.logger.warn('⚠️ Email credentials not found. Email service will be disabled.');
-      this.logger.warn('📝 Please set EMAIL_USER and EMAIL_PASS environment variables');
-      // Create a mock transporter that logs instead of sending
-      this.transporter = {
-        sendMail: async (options: any) => {
-          this.logger.log(`📧 Mock email would be sent to: ${options.to}`);
-          this.logger.log(`📝 Subject: ${options.subject}`);
-          this.logger.log(`📄 Content length: ${options.html?.length || 0} characters`);
-          return { messageId: 'mock-message-id' };
-        },
-        verify: async () => true,
-      } as any;
+    if (!apiKey || !domain) {
+      this.logger.warn('⚠️ Mailgun credentials not found. Email service will be disabled.');
+      this.logger.warn('📝 Please set MAILGUN_API_KEY and MAILGUN_DOMAIN environment variables');
       return;
     }
 
     try {
-      this.transporter = nodemailer.createTransport({
-        host: emailHost,
-        port: emailPort,
-        secure: emailSecure, // true for 465, false for other ports
-        auth: {
-          user: emailUser,
-          pass: emailPass,
-        },
+      const mailgun = new Mailgun(FormData);
+      this.mailgunClient = mailgun.client({
+        username: 'api',
+        key: apiKey,
       });
-
-      this.logger.log(`✅ Email service initialized successfully with host: ${emailHost}`);
+      this.domain = domain;
+      this.logger.log(`✅ Mailgun service initialized successfully for domain: ${domain}`);
     } catch (error) {
-      this.logger.error('❌ Failed to initialize email service:', error);
-      throw new Error(`Email service initialization failed: ${error.message}`);
+      this.logger.error('❌ Failed to initialize Mailgun service:', error);
+    }
+  }
+
+  async sendMail(options: { to: string | string[]; subject: string; html?: string; text?: string; from?: string }) {
+    if (!this.mailgunClient) {
+      this.logger.log(`📧 [Mock] would send email to: ${options.to} | Subject: ${options.subject}`);
+      return { id: 'mock-id', message: 'Mock email sent' };
+    }
+
+    try {
+      const data = await this.mailgunClient.messages.create(this.domain, {
+        from: options.from ||`Elite Gate <postmas ter@${this.domain}>`,
+        to: Array.isArray(options.to) ? options.to : [options.to],
+        subject: options.subject,
+        text: options.text,
+        html: options.html,
+      });
+      this.logger.log(`📧 Email sent successfully to ${options.to}`);
+      return data;
+    } catch (error) {
+      this.logger.error(`❌ Failed to send email to ${options.to}:`, error);
+      throw error;
     }
   }
 
@@ -63,7 +69,7 @@ export class MailService {
     const subject = this.getEmailSubject(data.purpose);
     const htmlContent = this.generateOtpTemplate(data);
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       to: userEmail,
       subject,
       html: htmlContent,
@@ -78,7 +84,6 @@ export class MailService {
     },
   ) {
     const subject = 'Welcome to Our Real Estate Platform - مرحباً بك في منصة العقارات';
-
     const htmlContent = `
     <!DOCTYPE html>
     <html lang="en">
@@ -285,7 +290,7 @@ export class MailService {
     </html>
     `;
 
-    await this.transporter.sendMail({
+    await this.sendMail({
       to: userEmail,
       subject,
       html: htmlContent,
@@ -753,13 +758,7 @@ export class MailService {
   }
 
   async testConnection(): Promise<boolean> {
-    try {
-      await this.transporter.verify();
-      console.log('✅ Email server connection established');
-      return true;
-    } catch (error) {
-      console.error('❌ Email server connection failed:', error);
-      return false;
-    }
+    if (this.mailgunClient) return true;
+    return false;
   }
 }
