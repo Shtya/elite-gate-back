@@ -25,11 +25,9 @@ JWT_REFRESH_EXPIRE=30d
 ### Email Configuration
 
 ```
-EMAIL_USER=postmaster@your-domain.mailgun.org
-EMAIL_PASS=your-mailgun-password
-EMAIL_HOST=smtp.mailgun.org
-EMAIL_PORT=587
-EMAIL_SECURE=false
+MAILGUN_API_KEY=your-api-key
+MAILGUN_DOMAIN=your-domain.com
+MAILGUN_URL=https://api.mailgun.net # or https://api.eu.mailgun.net for EU
 ```
 
 ### Application Configuration
