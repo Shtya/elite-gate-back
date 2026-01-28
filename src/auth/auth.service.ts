@@ -360,11 +360,11 @@ export class AuthService {
     await this.usersRepository.save(user);
 
     try {
-      // await this.mailService.sendOtpEmail(user.email, {
-      //   otp,
-      //   userName: user.fullName,
-      //   purpose: "login",
-      // });
+      await this.mailService.sendOtpEmail(user.email, {
+        otp,
+        userName: user.fullName,
+        purpose: "login",
+      });
       this.logger.log(`Login OTP email sent to ${user.email} and the otp is: ${otp}`);
     } catch (error) {
       this.logger.error(`Failed to send login OTP email to ${user.email}:`, error);
@@ -433,11 +433,11 @@ export class AuthService {
     await this.usersRepository.save(user);
 
     try {
-      // await this.mailService.sendOtpEmail(user.email, {
-      //   otp,
-      //   userName: user.fullName,
-      //   purpose: "registration",
-      // });
+      await this.mailService.sendOtpEmail(user.email, {
+        otp,
+        userName: user.fullName,
+        purpose: "registration",
+      });
       this.logger.log(`OTP resent to ${user.email} and the otp is: ${otp}`);
     } catch (error) {
       this.logger.error(`Failed to resend OTP email to ${user.email}:`, error);
@@ -495,11 +495,11 @@ export class AuthService {
       user.emailOtp = otp;
       user.emailOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
       try {
-        // await this.mailService.sendOtpEmail(user.email, {
-        //   otp,
-        //   userName: user.fullName,
-        //   purpose: "registration",
-        // });
+        await this.mailService.sendOtpEmail(user.email, {
+          otp,
+          userName: user.fullName,
+          purpose: "registration",
+        });
         message += " to your email";
         this.logger.log(`OTP resent to email: ${user.email} and the otp is: ${otp}`);
       } catch (error) {
@@ -557,11 +557,11 @@ export class AuthService {
       user.emailOtp = otp;
       user.emailOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
       try {
-        // await this.mailService.sendOtpEmail(user.email, {
-        //   otp,
-        //   userName: user.fullName,
-        //   purpose: "registration",
-        // });
+        await this.mailService.sendOtpEmail(user.email, {
+          otp,
+          userName: user.fullName,
+          purpose: "registration",
+        });
         message += " to your email";
         this.logger.log(`OTP sent to email: ${user.email} and the otp is: ${otp}` );
       } catch (error) {
@@ -628,7 +628,7 @@ export class AuthService {
    * Generate random OTP
    */
   private generateOtp(): string {
-    return '123456';
+    return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
   /**
@@ -669,11 +669,11 @@ export class AuthService {
     await this.usersRepository.save(user);
 
     try {
-      // await this.mailService.sendOtpEmail(user.email, {
-      //   otp,
-      //   userName: user.fullName,
-      //   purpose: "password_reset",
-      // });
+      await this.mailService.sendOtpEmail(user.email, {
+        otp,
+        userName: user.fullName,
+        purpose: "password_reset",
+      });
       this.logger.log(`Password reset OTP email sent to ${user.email} and the otp is: ${otp}`);
     } catch (error) {
       this.logger.error(`Failed to send password reset OTP email to ${user.email}:`, error);
