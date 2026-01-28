@@ -120,8 +120,13 @@ export class AuthService {
       throw new BadRequestException("Phone number is required for phone registration");
     }
 
+    // Normalize phone number (trim whitespace)
+    const normalizedPhone = registerDto.phoneNumber.trim();
+    
+    this.logger.log(`[Phone Register] Normalized phone: "${normalizedPhone}" (original: "${registerDto.phoneNumber}")`);
+
     const existingUser = await this.usersRepository.findOne({
-      where: { phoneNumber: registerDto.phoneNumber }
+      where: { phoneNumber: normalizedPhone }
     });
 
     if (existingUser) {
@@ -137,7 +142,7 @@ export class AuthService {
       : null;
 
     const user = this.usersRepository.create({
-      phoneNumber: registerDto.phoneNumber,
+      phoneNumber: normalizedPhone,
       fullName: registerDto.fullName,
       userType: UserType.CUSTOMER,
       profilePhotoUrl: registerDto.profilePhotoUrl,
@@ -157,9 +162,16 @@ export class AuthService {
    * Send OTP for phone login/registration
    */
   async sendPhoneOtp(phoneNumber: string): Promise<{ message: string }> {
+    // Normalize phone number (trim whitespace)
+    const normalizedPhone = phoneNumber.trim();
+    
+    this.logger.log(`[Send Phone OTP] Searching for user with phone: "${normalizedPhone}" (original: "${phoneNumber}")`);
+    
     const user = await this.usersRepository.findOne({
-      where: { phoneNumber }
+      where: { phoneNumber: normalizedPhone }
     });
+    
+    this.logger.log(`[Send Phone OTP] User found: ${user ? `Yes (ID: ${user.id})` : 'No'}`);
 
     if (!user) {
 
@@ -175,27 +187,129 @@ export class AuthService {
   async verifyPhoneOtp(
     verifyPhoneOtpDto: VerifyPhoneOtpDto
   ): Promise<{ accessToken: string; refreshToken: string; user: any }> {
-    const user = await this.usersRepository.findOne({
-      where: { phoneNumber: verifyPhoneOtpDto.phoneNumber }
-    });
+    // Normalize phone number (trim whitespace)
+    const normalizedPhone = verifyPhoneOtpDto.phoneNumber ? verifyPhoneOtpDto.phoneNumber.trim() : null;
+    
+    // Log what we're searching for
+    this.logger.log(`[Phone OTP] Searching for user...`);
+    this.logger.log(`[Phone OTP] Phone: "${normalizedPhone}" (original: "${verifyPhoneOtpDto.phoneNumber}")`);
+    
+    let user = null;
+    
+    // If phone number is provided, search by phone
+    if (normalizedPhone && normalizedPhone !== '') {
+      // Use QueryBuilder to ensure OTP fields are loaded
+      user = await this.usersRepository
+        .createQueryBuilder('user')
+        .addSelect('user.phoneOtp')
+        .addSelect('user.phoneOtpExpiresAt')
+        .addSelect('user.emailOtp')
+        .addSelect('user.emailOtpExpiresAt')
+        .where('user.phoneNumber = :phone', { phone: normalizedPhone })
+        .getOne();
+    } else {
+      // If no phone number, try to find user by email OTP (in case they're using wrong endpoint)
+      // Search for users with matching emailOtp
+      this.logger.log(`[Phone OTP] No phone number provided, searching by email OTP...`);
+      const normalizedOtp = String(verifyPhoneOtpDto.otp).trim();
+      
+      user = await this.usersRepository
+        .createQueryBuilder('user')
+        .addSelect('user.phoneOtp')
+        .addSelect('user.phoneOtpExpiresAt')
+        .addSelect('user.emailOtp')
+        .addSelect('user.emailOtpExpiresAt')
+        .where('user.emailOtp = :otp', { otp: normalizedOtp })
+        .orWhere('CAST(user.emailOtp AS TEXT) = :otpStr', { otpStr: normalizedOtp })
+        .getOne();
+      
+      if (user) {
+        this.logger.log(`[Phone OTP] Found user by email OTP: ${user.email} (ID: ${user.id})`);
+      }
+    }
+    
+    this.logger.log(`[Phone OTP] User found: ${user ? `Yes (ID: ${user.id})` : 'No'}`);
 
     if (!user) {
+      this.logger.error(`[Phone OTP] ❌ User not found!`);
+      this.logger.error(`[Phone OTP] Searched for phone: "${normalizedPhone}"`);
       throw new NotFoundException("User not found");
     }
 
-    // Check phone OTP validity
-    if (
-      !user.phoneOtp ||
-      user.phoneOtp !== verifyPhoneOtpDto.otp ||
-      !user.phoneOtpExpiresAt ||
-      user.phoneOtpExpiresAt < new Date()
-    ) {
+    // Determine which OTP to check: if no phone number provided, always check emailOtp
+    const useEmailOtp = !normalizedPhone || normalizedPhone === '';
+    const receivedOtpStr = String(verifyPhoneOtpDto.otp).trim();
+    const receivedOtpInt = parseInt(receivedOtpStr, 10);
+    
+    let isOtpValid = false;
+    let usedOtpField = '';
+    
+    if (useEmailOtp || (user.emailOtp && !user.phoneOtp)) {
+      // Check email OTP
+      const storedEmailOtpStr = user.emailOtp ? String(user.emailOtp).trim() : null;
+      const storedEmailOtpInt = storedEmailOtpStr && !isNaN(parseInt(storedEmailOtpStr, 10)) ? parseInt(storedEmailOtpStr, 10) : null;
+      const isEmailOtpExpired = user.emailOtpExpiresAt ? user.emailOtpExpiresAt <= new Date() : true;
+      
+      // Enhanced logging
+      this.logger.log(`[Phone OTP] ========================================`);
+      this.logger.log(`[Phone OTP] Checking EMAIL OTP (phone number not provided or user has emailOtp)`);
+      this.logger.log(`[Phone OTP] User ID: ${user.id}`);
+      this.logger.log(`[Phone OTP] User Email: ${user.email}`);
+      this.logger.log(`[Phone OTP] Stored emailOtp (raw): "${user.emailOtp}" (type: ${typeof user.emailOtp}, null: ${user.emailOtp === null})`);
+      this.logger.log(`[Phone OTP] Stored emailOtp (string): "${storedEmailOtpStr}" (int: ${storedEmailOtpInt})`);
+      this.logger.log(`[Phone OTP] Received OTP (string): "${receivedOtpStr}" (int: ${receivedOtpInt})`);
+      this.logger.log(`[Phone OTP] String Match: ${storedEmailOtpStr === receivedOtpStr}`);
+      this.logger.log(`[Phone OTP] Integer Match: ${storedEmailOtpInt === receivedOtpInt}`);
+      this.logger.log(`[Phone OTP] Expires At: ${user.emailOtpExpiresAt}, Current: ${new Date()}, Expired: ${isEmailOtpExpired}`);
+      
+      const hasStoredOtp = !!storedEmailOtpStr;
+      const otpMatches = storedEmailOtpStr === receivedOtpStr || storedEmailOtpInt === receivedOtpInt;
+      isOtpValid = hasStoredOtp && otpMatches && !isEmailOtpExpired;
+      usedOtpField = 'emailOtp';
+      
+      this.logger.log(`[Phone OTP] Validation: hasStoredOtp=${hasStoredOtp}, otpMatches=${otpMatches}, !isExpired=${!isEmailOtpExpired}`);
+      this.logger.log(`[Phone OTP] Final isOtpValid: ${isOtpValid}`);
+      this.logger.log(`[Phone OTP] ========================================`);
+    } else {
+      // Check phone OTP
+      const storedPhoneOtpStr = user.phoneOtp ? String(user.phoneOtp).trim() : null;
+      const storedPhoneOtpInt = storedPhoneOtpStr && !isNaN(parseInt(storedPhoneOtpStr, 10)) ? parseInt(storedPhoneOtpStr, 10) : null;
+      const isPhoneOtpExpired = user.phoneOtpExpiresAt ? user.phoneOtpExpiresAt <= new Date() : true;
+      
+      // Enhanced logging
+      this.logger.log(`[Phone OTP] ========================================`);
+      this.logger.log(`[Phone OTP] Phone: ${verifyPhoneOtpDto.phoneNumber}`);
+      this.logger.log(`[Phone OTP] User ID: ${user.id}`);
+      this.logger.log(`[Phone OTP] Stored phoneOtp (raw): "${user.phoneOtp}" (type: ${typeof user.phoneOtp}, null: ${user.phoneOtp === null})`);
+      this.logger.log(`[Phone OTP] Stored phoneOtp (string): "${storedPhoneOtpStr}" (int: ${storedPhoneOtpInt})`);
+      this.logger.log(`[Phone OTP] Received OTP (string): "${receivedOtpStr}" (int: ${receivedOtpInt})`);
+      this.logger.log(`[Phone OTP] String Match: ${storedPhoneOtpStr === receivedOtpStr}`);
+      this.logger.log(`[Phone OTP] Integer Match: ${storedPhoneOtpInt === receivedOtpInt}`);
+      this.logger.log(`[Phone OTP] Expires At: ${user.phoneOtpExpiresAt}, Current: ${new Date()}, Expired: ${isPhoneOtpExpired}`);
+      
+      const hasStoredOtp = !!storedPhoneOtpStr;
+      const otpMatches = storedPhoneOtpStr === receivedOtpStr || storedPhoneOtpInt === receivedOtpInt;
+      isOtpValid = hasStoredOtp && otpMatches && !isPhoneOtpExpired;
+      usedOtpField = 'phoneOtp';
+      
+      this.logger.log(`[Phone OTP] Validation: hasStoredOtp=${hasStoredOtp}, otpMatches=${otpMatches}, !isExpired=${!isPhoneOtpExpired}`);
+      this.logger.log(`[Phone OTP] Final isOtpValid: ${isOtpValid}`);
+      this.logger.log(`[Phone OTP] ========================================`);
+    }
+    
+    if (!isOtpValid) {
+      this.logger.warn(`[Phone OTP] Verification failed - Used field: ${usedOtpField}`);
       throw new UnauthorizedException("Invalid or expired OTP");
     }
 
-    // Clear OTP
-    user.phoneOtp = null;
-    user.phoneOtpExpiresAt = null;
+    // Clear the used OTP
+    if (usedOtpField === 'emailOtp') {
+      user.emailOtp = null;
+      user.emailOtpExpiresAt = null;
+    } else {
+      user.phoneOtp = null;
+      user.phoneOtpExpiresAt = null;
+    }
 
     // Mark as verified if not already
     if (user.verificationStatus !== VerificationStatus.VERIFIED) {
@@ -218,6 +332,8 @@ export class AuthService {
 
     const tokens = await this.generateTokens(user);
 
+    this.logger.log(`[Phone OTP] ✅ Verification successful for user ID: ${user.id}, Email: ${user.email}`);
+    
     return {
       ...tokens,
       user: {
@@ -225,7 +341,7 @@ export class AuthService {
         phoneNumber: user.phoneNumber,
         email: user.email,
         fullName: user.fullName,
-        userType: UserType.CUSTOMER,
+        userType: user.userType,
         verificationStatus: user.verificationStatus,
       }
     };
@@ -237,43 +353,133 @@ export class AuthService {
   async verifyOtp(verifyOtpDto: VerifyOtpDto): Promise<{ accessToken: string; refreshToken: string,user :User }> {
     let user: User;
 
-    if (verifyOtpDto.email) {
-      user = await this.usersRepository.findOne({
-        where: { email: verifyOtpDto.email }
-      });
-    } else if (verifyOtpDto.phoneNumber) {
-      user = await this.usersRepository.findOne({
-        where: { phoneNumber: verifyOtpDto.phoneNumber }
-      });
+    // Normalize inputs (trim and lowercase email)
+    const normalizedEmail = verifyOtpDto.email ? verifyOtpDto.email.trim().toLowerCase() : null;
+    const normalizedPhone = verifyOtpDto.phoneNumber ? verifyOtpDto.phoneNumber.trim() : null;
+
+    // Log what we're searching for
+    this.logger.log(`[OTP Verification] Searching for user...`);
+    if (normalizedEmail) {
+      this.logger.log(`[OTP Verification] Email: "${normalizedEmail}" (original: "${verifyOtpDto.email}")`);
+    }
+    if (normalizedPhone) {
+      this.logger.log(`[OTP Verification] Phone: "${normalizedPhone}" (original: "${verifyOtpDto.phoneNumber}")`);
+    }
+
+    if (normalizedEmail) {
+      // Use createQueryBuilder and addSelect to ensure OTP fields are loaded
+      // Use LOWER() for case-insensitive comparison
+      user = await this.usersRepository
+        .createQueryBuilder('user')
+        .addSelect('user.emailOtp')
+        .addSelect('user.emailOtpExpiresAt')
+        .addSelect('user.phoneOtp')
+        .addSelect('user.phoneOtpExpiresAt')
+        .where('LOWER(user.email) = LOWER(:email)', { email: normalizedEmail })
+        .getOne();
+      
+      this.logger.log(`[OTP Verification] User found by email: ${user ? `Yes (ID: ${user.id})` : 'No'}`);
+    } else if (normalizedPhone) {
+      // Use createQueryBuilder and addSelect to ensure OTP fields are loaded
+      user = await this.usersRepository
+        .createQueryBuilder('user')
+        .addSelect('user.emailOtp')
+        .addSelect('user.emailOtpExpiresAt')
+        .addSelect('user.phoneOtp')
+        .addSelect('user.phoneOtpExpiresAt')
+        .where('user.phoneNumber = :phone', { phone: normalizedPhone })
+        .getOne();
+      
+      this.logger.log(`[OTP Verification] User found by phone: ${user ? `Yes (ID: ${user.id})` : 'No'}`);
     } else {
       throw new BadRequestException("Either email or phone number is required");
     }
 
     if (!user) {
+      this.logger.error(`[OTP Verification] ❌ User not found!`);
+      if (normalizedEmail) {
+        this.logger.error(`[OTP Verification] Searched for email: "${normalizedEmail}"`);
+      }
+      if (normalizedPhone) {
+        this.logger.error(`[OTP Verification] Searched for phone: "${normalizedPhone}"`);
+      }
       throw new NotFoundException("User not found");
     }
 
-    // Check both email and phone OTP
-    const isEmailOtpValid = verifyOtpDto.email &&
-      user.emailOtp === verifyOtpDto.otp &&
-      user.emailOtpExpiresAt &&
-      user.emailOtpExpiresAt > new Date();
+    // Prepare received OTP for comparison
+    const receivedOtpStr = String(verifyOtpDto.otp).trim();
+    const receivedOtpInt = parseInt(receivedOtpStr, 10);
+    
+    let isOtpValid = false;
+    let usedOtpField = '';
+    
+    // Check email OTP if email is provided
+    if (verifyOtpDto.email) {
+      const storedEmailOtpStr = user.emailOtp ? String(user.emailOtp).trim() : null;
+      const storedEmailOtpInt = storedEmailOtpStr && !isNaN(parseInt(storedEmailOtpStr, 10)) ? parseInt(storedEmailOtpStr, 10) : null;
+      const isEmailOtpExpired = user.emailOtpExpiresAt ? user.emailOtpExpiresAt <= new Date() : true;
+      
+      // Debug logging
+      this.logger.log(`[OTP Verification] ========================================`);
+      this.logger.log(`[OTP Verification] Email: ${verifyOtpDto.email}`);
+      this.logger.log(`[OTP Verification] User ID: ${user.id}`);
+      this.logger.log(`[OTP Verification] User object has emailOtp: ${'emailOtp' in user}`);
+      this.logger.log(`[OTP Verification] Stored emailOtp (raw): "${user.emailOtp}" (type: ${typeof user.emailOtp}, null: ${user.emailOtp === null}, undefined: ${user.emailOtp === undefined})`);
+      this.logger.log(`[OTP Verification] Stored emailOtp (string): "${storedEmailOtpStr}" (int: ${storedEmailOtpInt})`);
+      this.logger.log(`[OTP Verification] Received OTP (raw): "${verifyOtpDto.otp}" (type: ${typeof verifyOtpDto.otp})`);
+      this.logger.log(`[OTP Verification] Received OTP (string): "${receivedOtpStr}" (int: ${receivedOtpInt})`);
+      this.logger.log(`[OTP Verification] String Match: ${storedEmailOtpStr === receivedOtpStr}`);
+      this.logger.log(`[OTP Verification] Integer Match: ${storedEmailOtpInt === receivedOtpInt}`);
+      this.logger.log(`[OTP Verification] Expires At: ${user.emailOtpExpiresAt}`);
+      this.logger.log(`[OTP Verification] Current Time: ${new Date()}`);
+      this.logger.log(`[OTP Verification] Is Expired: ${isEmailOtpExpired}`);
+      this.logger.log(`[OTP Verification] storedEmailOtpStr exists: ${!!storedEmailOtpStr}`);
+      this.logger.log(`[OTP Verification] OTP matches (string or int): ${storedEmailOtpStr === receivedOtpStr || storedEmailOtpInt === receivedOtpInt}`);
+      this.logger.log(`[OTP Verification] Not expired: ${!isEmailOtpExpired}`);
+      
+      // Try both string and integer comparison
+      const hasStoredOtp = !!storedEmailOtpStr;
+      const otpMatches = storedEmailOtpStr === receivedOtpStr || storedEmailOtpInt === receivedOtpInt;
+      
+      isOtpValid = hasStoredOtp && otpMatches && !isEmailOtpExpired;
+      usedOtpField = 'emailOtp';
+      
+      this.logger.log(`[OTP Verification] Final validation: hasStoredOtp=${hasStoredOtp}, otpMatches=${otpMatches}, !isExpired=${!isEmailOtpExpired}`);
+      this.logger.log(`[OTP Verification] Final isOtpValid: ${isOtpValid}`);
+      this.logger.log(`[OTP Verification] ========================================`);
+    }
+    // Check phone OTP if phone number is provided
+    else if (verifyOtpDto.phoneNumber) {
+      const storedPhoneOtpStr = user.phoneOtp ? String(user.phoneOtp).trim() : null;
+      const storedPhoneOtpInt = storedPhoneOtpStr ? parseInt(storedPhoneOtpStr, 10) : null;
+      const isPhoneOtpExpired = user.phoneOtpExpiresAt ? user.phoneOtpExpiresAt <= new Date() : true;
+      
+      // Debug logging
+      this.logger.log(`[OTP Verification] Phone: ${verifyOtpDto.phoneNumber}`);
+      this.logger.log(`[OTP Verification] Stored phoneOtp (raw): "${user.phoneOtp}" (type: ${typeof user.phoneOtp})`);
+      this.logger.log(`[OTP Verification] Stored phoneOtp (string): "${storedPhoneOtpStr}" (int: ${storedPhoneOtpInt})`);
+      this.logger.log(`[OTP Verification] Received OTP (string): "${receivedOtpStr}" (int: ${receivedOtpInt})`);
+      this.logger.log(`[OTP Verification] String Match: ${storedPhoneOtpStr === receivedOtpStr}`);
+      this.logger.log(`[OTP Verification] Integer Match: ${storedPhoneOtpInt === receivedOtpInt}`);
+      this.logger.log(`[OTP Verification] Expires At: ${user.phoneOtpExpiresAt}, Current: ${new Date()}, Expired: ${isPhoneOtpExpired}`);
+      
+      // Try both string and integer comparison
+      isOtpValid = storedPhoneOtpStr &&
+        (storedPhoneOtpStr === receivedOtpStr || storedPhoneOtpInt === receivedOtpInt) &&
+        !isPhoneOtpExpired;
+      usedOtpField = 'phoneOtp';
+    }
 
-    const isPhoneOtpValid = verifyOtpDto.phoneNumber &&
-      user.phoneOtp === verifyOtpDto.otp &&
-      user.phoneOtpExpiresAt &&
-      user.phoneOtpExpiresAt > new Date();
-
-    if (!isEmailOtpValid && !isPhoneOtpValid) {
+    if (!isOtpValid) {
+      this.logger.warn(`[OTP Verification] Failed - Used field: ${usedOtpField}, Valid: ${isOtpValid}`);
       throw new UnauthorizedException("Invalid or expired OTP");
     }
 
     // Clear the used OTP
-    if (isEmailOtpValid) {
+    if (usedOtpField === 'emailOtp') {
       user.emailOtp = null;
       user.emailOtpExpiresAt = null;
-    }
-    if (isPhoneOtpValid) {
+    } else if (usedOtpField === 'phoneOtp') {
       user.phoneOtp = null;
       user.phoneOtpExpiresAt = null;
     }
@@ -310,36 +516,59 @@ export class AuthService {
    * Universal login that supports both email and phone with password
    */
   async login(loginDto: LoginDto): Promise<{ accessToken: string; refreshToken: string,user:User }> {
+    this.logger.log(`[Login] Attempting login...`);
+    this.logger.log(`[Login] Email: ${loginDto.email || 'not provided'}, Phone: ${loginDto.phoneNumber || 'not provided'}`);
+    
     let user: User | null = null; // Explicitly type as User | null
 
     const qb = this.usersRepository.createQueryBuilder("user")
       .addSelect("user.passwordHash") // Explicitly select passwordHash
       
     if (loginDto.email) {
-      user = await qb.where("user.email = :email", { email: loginDto.email }).getOne();
+      // Normalize email (trim and lowercase)
+      const normalizedEmail = loginDto.email.trim().toLowerCase();
+      this.logger.log(`[Login] Searching by email: "${normalizedEmail}"`);
+      user = await qb.where("LOWER(user.email) = LOWER(:email)", { email: normalizedEmail }).getOne();
     } else if (loginDto.phoneNumber) {
-      user = await qb.where("user.phoneNumber = :phone", { phone: loginDto.phoneNumber }).getOne();
+      // Normalize phone number (trim)
+      const normalizedPhone = loginDto.phoneNumber.trim();
+      this.logger.log(`[Login] Searching by phone: "${normalizedPhone}"`);
+      user = await qb.where("user.phoneNumber = :phone", { phone: normalizedPhone }).getOne();
     } else {
       throw new BadRequestException("Either email or phone number is required");
     }
 
-    if (!user || !user.passwordHash) {
+    this.logger.log(`[Login] User found: ${user ? `Yes (ID: ${user.id})` : 'No'}`);
+
+    if (!user) {
+      this.logger.warn(`[Login] ❌ User not found`);
       throw new UnauthorizedException("Invalid credentials");
     }
 
+    if (!user.passwordHash) {
+      this.logger.warn(`[Login] ❌ User has no password hash (ID: ${user.id})`);
+      throw new UnauthorizedException("Invalid credentials");
+    }
+
+    this.logger.log(`[Login] Comparing password...`);
     const isPasswordValid = await bcrypt.compare(loginDto.password, user.passwordHash);
     if (!isPasswordValid) {
+      this.logger.warn(`[Login] ❌ Password mismatch for user ID: ${user.id}`);
       throw new UnauthorizedException("Invalid credentials");
     }
 
+    this.logger.log(`[Login] Password valid. Checking verification status: ${user.verificationStatus}`);
     if (user.verificationStatus !== VerificationStatus.VERIFIED) {
+      this.logger.warn(`[Login] ❌ User not verified (ID: ${user.id}, Status: ${user.verificationStatus})`);
       throw new UnauthorizedException("Please verify your account before logging in");
     }
 
     if (user.isActive === false) {
+      this.logger.warn(`[Login] ❌ User account deactivated (ID: ${user.id})`);
       throw new UnauthorizedException("Your account has been deactivated. Please contact support.");
     }
 
+    this.logger.log(`[Login] ✅ Login successful for user ID: ${user.id}`);
     return { ...await this.generateTokens(user), user };
   }
 
@@ -347,7 +576,18 @@ export class AuthService {
    * Send login OTP via email
    */
   async sendEmailLoginOtp({ email }: EmailLoginDto): Promise<{ message: string }> {
-    const user = await this.usersRepository.findOne({ where: { email } });
+    // Normalize email (trim and lowercase) for consistent lookup
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    this.logger.log(`[Email Login] Searching for user with email: "${normalizedEmail}" (original: "${email}")`);
+    
+    // Use QueryBuilder for case-insensitive email lookup
+    const user = await this.usersRepository
+      .createQueryBuilder('user')
+      .where('LOWER(user.email) = LOWER(:email)', { email: normalizedEmail })
+      .getOne();
+    
+    this.logger.log(`[Email Login] User found: ${user ? `Yes (ID: ${user.id})` : 'No'}`);
 
     if (!user) {
       // For security, don't reveal if user exists
@@ -355,9 +595,11 @@ export class AuthService {
     }
 
     const otp = this.generateOtp();
-    user.emailOtp = otp;
+    // Ensure OTP is stored as string
+    user.emailOtp = String(otp);
     user.emailOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
     await this.usersRepository.save(user);
+    this.logger.log(`[OTP Storage] Stored email OTP: "${user.emailOtp}" (type: ${typeof user.emailOtp})`);
 
     try {
       await this.mailService.sendOtpEmail(user.email, {
@@ -383,15 +625,48 @@ export class AuthService {
     accessToken: string;
     refreshToken: string;
   }> {
-    const user = await this.usersRepository.findOne({ where: { email } });
+    // Normalize email (trim and lowercase)
+    const normalizedEmail = email.trim().toLowerCase();
+    
+    this.logger.log(`[Email Login OTP] Searching for user with email: "${normalizedEmail}" (original: "${email}")`);
+    
+    // Use createQueryBuilder and addSelect to ensure OTP fields are loaded
+    // Use LOWER() for case-insensitive comparison
+    const user = await this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.emailOtp')
+      .addSelect('user.emailOtpExpiresAt')
+      .where('LOWER(user.email) = LOWER(:email)', { email: normalizedEmail })
+      .getOne();
+    
+    this.logger.log(`[Email Login OTP] User found: ${user ? `Yes (ID: ${user.id})` : 'No'}`);
 
+    const storedOtpStr = user?.emailOtp ? String(user.emailOtp).trim() : null;
+    const storedOtpInt = storedOtpStr ? parseInt(storedOtpStr, 10) : null;
+    const receivedOtpStr = String(otp).trim();
+    const receivedOtpInt = parseInt(receivedOtpStr, 10);
+    const isExpired = user?.emailOtpExpiresAt ? user.emailOtpExpiresAt < new Date() : true;
+    
+    // Debug logging
+    this.logger.log(`[Email Login OTP] Email: ${email}`);
+    this.logger.log(`[Email Login OTP] Stored OTP (raw): "${user?.emailOtp}" (type: ${typeof user?.emailOtp})`);
+    this.logger.log(`[Email Login OTP] Stored OTP (string): "${storedOtpStr}" (int: ${storedOtpInt})`);
+    this.logger.log(`[Email Login OTP] Received OTP (string): "${receivedOtpStr}" (int: ${receivedOtpInt})`);
+    this.logger.log(`[Email Login OTP] String Match: ${storedOtpStr === receivedOtpStr}`);
+    this.logger.log(`[Email Login OTP] Integer Match: ${storedOtpInt === receivedOtpInt}`);
+    this.logger.log(`[Email Login OTP] Expires At: ${user?.emailOtpExpiresAt}, Current: ${new Date()}, Expired: ${isExpired}`);
+    
+    // Try both string and integer comparison
+    const otpMatches = storedOtpStr && (storedOtpStr === receivedOtpStr || storedOtpInt === receivedOtpInt);
+    
     if (
       !user ||
-      !user.emailOtp ||
+      !storedOtpStr ||
       !user.emailOtpExpiresAt || 
-      user.emailOtp !== otp ||
-      user.emailOtpExpiresAt < new Date()
+      !otpMatches ||
+      isExpired
     ) {
+      this.logger.warn(`[Email Login OTP] Verification failed - User exists: ${!!user}, Has OTP: ${!!storedOtpStr}, Match: ${otpMatches}, Expired: ${isExpired}`);
       throw new UnauthorizedException("Invalid or expired OTP");
     }
 
@@ -473,15 +748,27 @@ export class AuthService {
    * Find user by email or phone number
    */
   private async findUserByIdentifier(email?: string, phoneNumber?: string): Promise<User | null> {
-    const whereConditions: any[] = [];
-    if (email) whereConditions.push({ email });
-    if (phoneNumber) whereConditions.push({ phoneNumber });
+    // Normalize inputs for consistent lookup
+    const normalizedEmail = email ? email.trim().toLowerCase() : null;
+    const normalizedPhone = phoneNumber ? phoneNumber.trim() : null;
 
-    if (whereConditions.length === 0) return null;
+    if (!normalizedEmail && !normalizedPhone) return null;
 
-    return await this.usersRepository.findOne({
-      where: whereConditions,
-    });
+    // Use QueryBuilder for case-insensitive email lookup
+    const queryBuilder = this.usersRepository.createQueryBuilder('user');
+    
+    if (normalizedEmail && normalizedPhone) {
+      queryBuilder.where('(LOWER(user.email) = LOWER(:email) OR user.phoneNumber = :phone)', {
+        email: normalizedEmail,
+        phone: normalizedPhone,
+      });
+    } else if (normalizedEmail) {
+      queryBuilder.where('LOWER(user.email) = LOWER(:email)', { email: normalizedEmail });
+    } else if (normalizedPhone) {
+      queryBuilder.where('user.phoneNumber = :phone', { phone: normalizedPhone });
+    }
+
+    return await queryBuilder.getOne();
   }
 
   /**
@@ -537,9 +824,15 @@ export class AuthService {
   private async createNewUser(registerDto: RegisterDto): Promise<{ message: string }> {
     const passwordHash = await bcrypt.hash(registerDto.password, 12);
 
+    // Normalize email (trim and lowercase) for consistent storage
+    const normalizedEmail = registerDto.email ? registerDto.email.trim().toLowerCase() : null;
+    const normalizedPhone = registerDto.phoneNumber ? registerDto.phoneNumber.trim() : null;
+
+    this.logger.log(`[Registration] Creating user with email: "${normalizedEmail}" (original: "${registerDto.email}")`);
+
     const user = this.usersRepository.create({
-      email: registerDto.email,
-      phoneNumber: registerDto.phoneNumber,
+      email: normalizedEmail,
+      phoneNumber: normalizedPhone,
       fullName: registerDto.fullName,
       userType: UserType.CUSTOMER,
       profilePhotoUrl: registerDto.profilePhotoUrl,
@@ -590,8 +883,10 @@ export class AuthService {
    */
   private async sendPhoneOtpToUser(user: User): Promise<void> {
     const otp = this.generateOtp();
-    user.phoneOtp = otp;
+    // Ensure OTP is stored as string
+    user.phoneOtp = String(otp);
     user.phoneOtpExpiresAt = new Date(Date.now() + 10 * 60 * 1000);
+    this.logger.log(`[OTP Storage] Stored phone OTP: "${user.phoneOtp}" (type: ${typeof user.phoneOtp})`);
     this.logger.log(`Login OTP email sent to ${user.phoneNumber} and the otp is: ${otp}`);
 
     await this.usersRepository.save(user);
@@ -794,7 +1089,14 @@ export class AuthService {
     });
   }
   async forgotPasswordByPhone(phoneNumber: string): Promise<{ message: string }> {
-    const user = await this.usersRepository.findOne({ where: { phoneNumber } });
+    // Normalize phone number (trim whitespace)
+    const normalizedPhone = phoneNumber.trim();
+    
+    this.logger.log(`[Forgot Password Phone] Searching for user with phone: "${normalizedPhone}" (original: "${phoneNumber}")`);
+    
+    const user = await this.usersRepository.findOne({ where: { phoneNumber: normalizedPhone } });
+    
+    this.logger.log(`[Forgot Password Phone] User found: ${user ? `Yes (ID: ${user.id})` : 'No'}`);
 
     // Always return same message for security
     if (!user) {
@@ -816,17 +1118,32 @@ export class AuthService {
     otp,
     newPassword,
   }: ResetPasswordPhoneDto): Promise<{ message: string }> {
-    const user = await this.usersRepository.findOne({ where: { phoneNumber } });
+    // Normalize phone number (trim whitespace)
+    const normalizedPhone = phoneNumber.trim();
+    
+    this.logger.log(`[Reset Password Phone] Searching for user with phone: "${normalizedPhone}" (original: "${phoneNumber}")`);
+    
+    // Use QueryBuilder to ensure OTP fields are loaded
+    const user = await this.usersRepository
+      .createQueryBuilder('user')
+      .addSelect('user.resetOtp')
+      .addSelect('user.resetOtpExpiresAt')
+      .where('user.phoneNumber = :phone', { phone: normalizedPhone })
+      .getOne();
+    
+    this.logger.log(`[Reset Password Phone] User found: ${user ? `Yes (ID: ${user.id})` : 'No'}`);
+    
     if (!user) {
+      this.logger.error(`[Reset Password Phone] ❌ User not found!`);
+      this.logger.error(`[Reset Password Phone] Searched for phone: "${normalizedPhone}"`);
       throw new UnauthorizedException("User not found");
     }
 
     if (!user.resetOtp) {
       throw new UnauthorizedException("Reset code not generated");
     }
-    console.log(user.resetOtp)
-    console.log(otp)
-    if (user.resetOtp !== otp) {
+    // Convert to string and trim for comparison to avoid type/whitespace issues
+    if (String(user.resetOtp).trim() !== String(otp).trim()) {
       throw new UnauthorizedException("Invalid reset code");
     }
 

@@ -379,13 +379,13 @@ export class User extends CoreEntity {
   @Column({ nullable: true, select: false })
   passwordHash?: string;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 10, nullable: true })
   emailOtp?: string;
 
   @Column({ type: 'timestamp', nullable: true })
   emailOtpExpiresAt?: Date;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 10, nullable: true })
   resetOtp?: string;
 
   @Column({ type: 'timestamp', nullable: true })
@@ -393,7 +393,7 @@ export class User extends CoreEntity {
 
   @Column({ name: 'is_active', type: 'boolean', default: true })
   isActive: boolean;
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', length: 10, nullable: true })
   phoneOtp?: string;
 
   @Column({ type: 'timestamp', nullable: true })

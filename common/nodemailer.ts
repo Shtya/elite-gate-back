@@ -1,7 +1,9 @@
 
 import { Injectable, Logger } from '@nestjs/common';
-import FormData from 'form-data';
 import Mailgun from 'mailgun.js';
+
+// Use require for form-data to ensure proper constructor
+const FormData = require('form-data');
 
 @Injectable()
 export class MailService {
@@ -19,11 +21,12 @@ export class MailService {
 
     if (!apiKey || !domain) {
       this.logger.warn('⚠️ Mailgun credentials not found. Email service will be disabled.');
-      this.logger.warn('📝 Please set MAILGUN_API_KEY and MAILGUN_DOMAIN environment variables');
+      this.logger.warn('📝 Please set API_KEY and MAILGUN_DOMAIN environment variables');
       return;
     }
 
     try {
+      // Initialize Mailgun with FormData constructor
       const mailgun = new Mailgun(FormData);
       this.mailgunClient = mailgun.client({
         username: 'api',
@@ -43,17 +46,41 @@ export class MailService {
     }
 
     try {
-      const data = await this.mailgunClient.messages.create(this.domain, {
-        from: options.from ||`Elite Gate <postmas ter@${this.domain}>`,
-        to: Array.isArray(options.to) ? options.to : [options.to],
+      // Ensure 'to' is always an array for Mailgun
+      const recipients = Array.isArray(options.to) ? options.to : [options.to];
+      
+      // Default from address
+      const fromAddress = options.from || `EliteGate <elitegate@${this.domain}>`;
+      
+      // Mailgun requires at least text or html
+      const messageData: any = {
+        from: fromAddress,
+        to: recipients,
         subject: options.subject,
-        text: options.text,
-        html: options.html,
-      });
-      this.logger.log(`📧 Email sent successfully to ${options.to}`);
+      };
+      
+      // Add text and/or html if provided
+      if (options.text) {
+        messageData.text = options.text;
+      }
+      if (options.html) {
+        messageData.html = options.html;
+      }
+      
+      // If neither text nor html provided, use html as text
+      if (!messageData.text && !messageData.html) {
+        messageData.text = 'No content provided';
+      }
+      
+      const data = await this.mailgunClient.messages.create(this.domain, messageData);
+      this.logger.log(`📧 Email sent successfully to ${recipients.join(', ')}`);
       return data;
     } catch (error) {
       this.logger.error(`❌ Failed to send email to ${options.to}:`, error);
+      // Log more details about the error
+      if (error.response) {
+        this.logger.error(`Error response: ${JSON.stringify(error.response.body || error.response)}`);
+      }
       throw error;
     }
   }
@@ -403,6 +430,16 @@ export class MailService {
                 <p>Secure Verification Code - رمز التحقق الآمن</p>
             </div>
 
+            <!-- OTP Code Section (Single Display) -->
+            <div style="text-align: center; margin: 30px 0;">
+                <p style="font-size: 18px; color: #333; margin-bottom: 15px;">
+                    <strong>Your Verification Code - رمز التحقق الخاص بك</strong>
+                </p>
+                <div class="otp-code">
+                    ${data.otp}
+                </div>
+            </div>
+
             <!-- English Section -->
             <div class="language-section english">
                 <p>Dear <strong>${data.userName}</strong>,</p>
@@ -411,11 +448,7 @@ export class MailService {
                     ${purposeText[data.purpose].en}
                 </div>
 
-                <p>Please use the verification code below to complete your request:</p>
-
-                <div class="otp-code">
-                    ${data.otp}
-                </div>
+                <p>Please use the verification code above to complete your request.</p>
 
                 <div class="warning">
                     ⚠️ <strong>Important:</strong><br>
@@ -434,11 +467,7 @@ export class MailService {
                     ${purposeText[data.purpose].ar}
                 </div>
 
-                <p>يرجى استخدام رمز التحقق أدناه لإكمال طلبك:</p>
-
-                <div class="otp-code">
-                    ${data.otp}
-                </div>
+                <p>يرجى استخدام رمز التحقق أعلاه لإكمال طلبك.</p>
 
                 <div class="warning">
                     ⚠️ <strong>مهم:</strong><br>
