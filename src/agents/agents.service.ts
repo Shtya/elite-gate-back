@@ -1,9 +1,9 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { toWebPathFiles } from 'common/upload.config';
 import { InjectRepository } from '@nestjs/typeorm';
-import { MoreThanOrEqual, Repository } from 'typeorm';
+import { MoreThanOrEqual, Repository, In } from 'typeorm';
 
-import { Agent, AgentAppointmentRequest, AgentApprovalStatus, AgentBalance, AgentPayment, Appointment, AppointmentStatus, Area, City, CustomerReview, NotificationChannel, NotificationType, PaymentStatus, User, UserType, VerificationStatus, WalletTransaction } from '../../entities/global.entity';
+import { Agent, AgentAppointmentRequest, AgentApprovalStatus, AgentBalance, AgentPayment, Appointment, AppointmentStatus, Area, City, CustomerReview, NotificationChannel, NotificationType, PaymentStatus, User, UserType, VerificationStatus, WalletTransaction, RatingDimension } from '../../entities/global.entity';
 import { CreateAgentDto, UpdateAgentDto, ApproveAgentDto, AgentQueryDto } from '../../dto/agents.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
@@ -49,26 +49,112 @@ export class AgentsService {
 
     const where: any = {};
     if (status) where.status = status;
-    if (cityId) where.city = { id: cityId };
+    // Note: cityId filter requires a query builder since Agent has many-to-many with cities
 
-    const [data, total] = await this.agentsRepository.findAndCount({
-      where,
-      relations: ['user', 'city'],
-      skip,
-      take: limit,
-      order: { createdAt: 'DESC' },
-    });
+    const qb = this.agentsRepository.createQueryBuilder('agent')
+      .leftJoinAndSelect('agent.user', 'user')
+      .leftJoinAndSelect('agent.cities', 'city')
+      .leftJoinAndSelect('agent.areas', 'area')
+      .skip(skip)
+      .take(limit)
+      .orderBy('agent.createdAt', 'DESC');
 
-    // Attach rating summary to each agent
-    const agentsWithRatings = await Promise.all(data.map(async (agent) => {
-      const reviewSummary = await this.reviewsService.getAgentReviewSummary(agent.user.id);
+    if (status) {
+      qb.andWhere('agent.status = :status', { status });
+    }
+    if (cityId) {
+      qb.andWhere('city.id = :cityId', { cityId: Number(cityId) });
+    }
+
+    const [data, total] = await qb.getManyAndCount();
+
+    // Optimize: Fetch all reviews for all agents in one query
+    const agentUserIds = data.filter(agent => agent.user).map(agent => agent.user.id);
+    
+    let reviewsByAgentId: Map<number, CustomerReview[]> = new Map();
+    
+    if (agentUserIds.length > 0) {
+      const allReviews = await this.reviewRepo.find({
+        where: { agentId: In(agentUserIds), isApproved: true },
+        relations: ['dimensions'],
+      });
+      
+      // Group reviews by agentId
+      allReviews.forEach(review => {
+        if (!reviewsByAgentId.has(review.agentId)) {
+          reviewsByAgentId.set(review.agentId, []);
+        }
+        reviewsByAgentId.get(review.agentId)!.push(review);
+      });
+    }
+
+    // Attach rating summary to each agent (computed in memory, no more queries)
+    const agentsWithRatings = data.map((agent) => {
+      let reviewSummary = { averageRating: 0, totalReviews: 0, dimensionAverages: {} };
+      
+      if (agent.user) {
+        const reviews = reviewsByAgentId.get(agent.user.id) || [];
+        reviewSummary = this.computeReviewSummary(reviews);
+      }
+      
       return {
         ...agent,
         reviewSummary
       };
-    }));
+    });
 
     return { data: agentsWithRatings, total };
+  }
+
+  // Helper method to compute review summary from reviews array
+  private computeReviewSummary(reviews: CustomerReview[]): any {
+    if (reviews.length === 0) {
+      return {
+        averageRating: 0,
+        totalReviews: 0,
+        dimensionAverages: {},
+      };
+    }
+
+    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+    const averageRating = totalRating / reviews.length;
+
+    // Calculate dimension averages
+    const dimensionSums: { [key in RatingDimension]: number } = {
+      [RatingDimension.PUNCTUALITY]: 0,
+      [RatingDimension.ACCURACY]: 0,
+      [RatingDimension.PROFESSIONALISM]: 0,
+      [RatingDimension.TRUSTWORTHINESS]: 0,
+      [RatingDimension.RECOMMENDATION]: 0,
+    };
+    const dimensionCounts: { [key in RatingDimension]: number } = {
+      [RatingDimension.PUNCTUALITY]: 0,
+      [RatingDimension.ACCURACY]: 0,
+      [RatingDimension.PROFESSIONALISM]: 0,
+      [RatingDimension.TRUSTWORTHINESS]: 0,
+      [RatingDimension.RECOMMENDATION]: 0,
+    };
+
+    reviews.forEach(review => {
+      review.dimensions?.forEach(dimension => {
+        if (dimensionSums[dimension.dimension] !== undefined) {
+          dimensionSums[dimension.dimension] += dimension.score;
+          dimensionCounts[dimension.dimension]++;
+        }
+      });
+    });
+
+    const dimensionAverages: any = {};
+    Object.keys(RatingDimension).forEach(dimension => {
+      const count = dimensionCounts[dimension as RatingDimension];
+      dimensionAverages[dimension] = count > 0 ? dimensionSums[dimension as RatingDimension] / count : 0;
+    });
+
+    return {
+      averageRating: Math.round(averageRating * 10) / 10,
+      totalReviews: reviews.length,
+      dimensionAverages,
+    };
   }
 
   async findOne(id: number): Promise<any> {
@@ -91,6 +177,7 @@ export class AgentsService {
       appointmentConfirmed,
       appointmentCompleted,
       appointmentRejected,
+      reviews
     ] = await Promise.all([
       this.agentAppointmentRepository.countBy({
         status: AppointmentStatus.ACCEPTED,
@@ -116,6 +203,11 @@ export class AgentsService {
         status: AppointmentStatus.REJECTED,
         agent: { id },
       }),
+      this.reviewRepo.find({
+        where: { agentId: agent.user.id },
+        relations: ['customer', 'dimensions'],
+        order: { createdAt: 'DESC' }
+      })
     ]);
 
     return {
@@ -129,6 +221,7 @@ export class AgentsService {
         rejected: appointmentRejected,
       },
       reviewSummary,
+      reviews, // Included individual reviews
     };
   }
   private async resolveCityAndAreaSelection(cityIds: any[], areaIds: any[]) {

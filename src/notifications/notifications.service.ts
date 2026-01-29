@@ -173,16 +173,15 @@ export class NotificationsService {
       channel?: NotificationChannel;
     },
   ): Promise<void> {
-    const notifications = await Promise.all(
-      userIds.map(async userId => {
-        const user = await this.usersRepository.findOne({ where: { id: userId } });
-        return this.notificationsRepository.create({
-          user,
-          ...data,
-          status: NotificationStatus.PENDING,
-        });
-      }),
-    );
+    const notifications = userIds.map(userId => {
+      // Create user dummy object with ID to avoid fetching
+      const user = { id: userId } as User;
+      return this.notificationsRepository.create({
+        user,
+        ...data,
+        status: NotificationStatus.PENDING,
+      });
+    });
 
     await this.notificationsRepository.save(notifications);
   }

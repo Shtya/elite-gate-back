@@ -24,6 +24,7 @@ export class ReviewsService {
   ) {}
 
   async createCustomerReview(createDto: CreateCustomerReviewDto): Promise<CustomerReview> {
+    console.log('createCustomerReview DTO:', JSON.stringify(createDto));
     const appointment = await this.appointmentRepository.findOne({
       where: { id: createDto.appointmentId },
       relations: ['customer', 'agent'],
@@ -52,6 +53,7 @@ export class ReviewsService {
     const generatedDimensions: { dimension: RatingDimension; score: number }[] = [];
 
     if (createDto.punctuality || createDto.accuracy || createDto.professionalism || createDto.trustworthiness || createDto.recommendation) {
+      console.log('Processing individual dimension fields for CustomerReview...');
       // 1. Punctuality
       let punctualityScore = 0;
       if (createDto.punctuality) {
@@ -96,13 +98,15 @@ export class ReviewsService {
 
         generatedDimensions.push({ dimension: RatingDimension.RECOMMENDATION, score: recScore });
       }
-
+      
       // Calculate Average for main rating
       if (generatedDimensions.length > 0) {
         const sum = generatedDimensions.reduce((acc, curr) => acc + curr.score, 0);
         finalRating = sum / generatedDimensions.length;
       }
     }
+    
+    console.log('Final generatedDimensions (Customer):', generatedDimensions);
 
     if (finalRating === 0 && (!createDto.dimensions || createDto.dimensions.length === 0)) {
         throw new BadRequestException('Rating or rating dimensions are required');
@@ -121,6 +125,7 @@ export class ReviewsService {
     // Save dimensions
     // Combine generated dimensions with manually passed dimensions (if any, though uncommon to mix)
     const dimensionsToSave = [...(createDto.dimensions || []), ...generatedDimensions.map(d => ({ dimension: d.dimension, score: d.score }))];
+    console.log('dimensionsToSave (Customer):', dimensionsToSave);
     
     if (dimensionsToSave.length > 0) {
       const dimensions = dimensionsToSave.map(dim =>
@@ -132,7 +137,8 @@ export class ReviewsService {
       );
       await this.customerReviewDimensionRepository.save(dimensions);
     }
-
+    
+    console.log('Notification start...');
     // Notify the agent about a new review
     await this.notificationsService.createNotification({
       userId: createDto.agentId,
@@ -151,11 +157,13 @@ export class ReviewsService {
       relatedId: savedReview.id,
       channel: NotificationChannel.IN_APP,
     });
+    console.log('Notification done.');
 
     return this.findCustomerReview(savedReview.id);
   }
 
   async createAgentReview(createDto: CreateAgentReviewDto): Promise<AgentReview> {
+    console.log('createAgentReview DTO:', JSON.stringify(createDto));
     const appointment = await this.appointmentRepository.findOne({
       where: { id: createDto.appointmentId },
       relations: ['customer', 'agent'],
@@ -179,10 +187,66 @@ export class ReviewsService {
       reviewText: createDto.reviewText,
     });
 
-    const savedReview = await this.agentReviewRepository.save(review);
+    // Calculate dimensions if specific fields are provided
+    const generatedDimensions: { dimension: RatingDimension; score: number }[] = [];
 
-    if (createDto.dimensions && createDto.dimensions.length > 0) {
-      const dimensions = createDto.dimensions.map(dim =>
+    if (createDto.punctuality || createDto.accuracy || createDto.professionalism || createDto.trustworthiness || createDto.recommendation) {
+      console.log('Processing individual dimension fields for AgentReview...');
+      // 1. Punctuality
+      let punctualityScore = 0;
+      if (createDto.punctuality) {
+        switch (createDto.punctuality) {
+          case PunctualityStatus.COMMITTED:
+            punctualityScore = 5;
+            break;
+          case PunctualityStatus.SLIGHT_DELAY:
+            punctualityScore = 3;
+            break;
+          case PunctualityStatus.NOTICEABLE_DELAY:
+            punctualityScore = 1;
+            break;
+        }
+        generatedDimensions.push({ dimension: RatingDimension.PUNCTUALITY, score: punctualityScore });
+      }
+
+      // 2. Accuracy
+      if (createDto.accuracy) {
+        generatedDimensions.push({ dimension: RatingDimension.ACCURACY, score: createDto.accuracy });
+      }
+
+      // 3. Professionalism
+      if (createDto.professionalism) {
+        generatedDimensions.push({ dimension: RatingDimension.PROFESSIONALISM, score: createDto.professionalism });
+      }
+
+      // 4. Trustworthiness (Knowledge)
+      if (createDto.trustworthiness) {
+        generatedDimensions.push({ dimension: RatingDimension.TRUSTWORTHINESS, score: createDto.trustworthiness });
+      }
+
+      // 5. Recommendation
+      if (createDto.recommendation) {
+        let recScore = 1;
+        const val = createDto.recommendation;
+        if (val >= 9) recScore = 5;
+        else if (val >= 7) recScore = 4;
+        else if (val >= 6) recScore = 3;
+        else if (val >= 5) recScore = 2;
+        else recScore = 1;
+
+        generatedDimensions.push({ dimension: RatingDimension.RECOMMENDATION, score: recScore });
+      }
+    }
+    
+    console.log('Final generatedDimensions (Agent):', generatedDimensions);
+
+    const savedReview = await this.agentReviewRepository.save(review);
+    
+    const dimensionsToSave = [...(createDto.dimensions || []), ...generatedDimensions.map(d => ({ dimension: d.dimension, score: d.score }))];
+    console.log('dimensionsToSave (Agent):', dimensionsToSave);
+
+    if (dimensionsToSave.length > 0) {
+      const dimensions = dimensionsToSave.map(dim =>
         this.agentReviewDimensionRepository.create({
           review: savedReview,
           dimension: dim.dimension,
@@ -191,7 +255,8 @@ export class ReviewsService {
       );
       await this.agentReviewDimensionRepository.save(dimensions);
     }
-
+    
+    console.log('Notification start...');
     // Notify the customer about the agent’s review
     await this.notificationsService.createNotification({
       userId: appointment.customer.id,
@@ -201,6 +266,7 @@ export class ReviewsService {
       relatedId: savedReview.id,
       channel: NotificationChannel.IN_APP,
     });
+    console.log('Notification done.');
 
     return this.findAgentReview(savedReview.id);
   }
@@ -244,10 +310,22 @@ export class ReviewsService {
   }
 
   async getAgentReviewSummary(agentId: number): Promise<any> {
+    console.log('getAgentReviewSummary called with agentId:', agentId);
+    if (!agentId) {
+       console.log('getAgentReviewSummary: agentId is null/undefined');
+       return {
+         averageRating: 0,
+         totalReviews: 0,
+         dimensionAverages: {},
+       };
+    }
+
     const reviews = await this.customerReviewRepository.find({
       where: { agentId, isApproved: true },
       relations: ['dimensions'],
     });
+
+    console.log(`getAgentReviewSummary: found ${reviews.length} reviews for agent ${agentId}`);
 
     if (reviews.length === 0) {
       return {
@@ -296,5 +374,28 @@ export class ReviewsService {
       totalReviews: reviews.length,
       dimensionAverages,
     };
+  }
+
+  async getTopRatedAgents(limit: number = 5): Promise<any[]> {
+    const topAgents = await this.customerReviewRepository
+      .createQueryBuilder('review')
+      .select('review.agentId', 'agentId')
+      .addSelect('AVG(review.rating)', 'averageRating')
+      .where('review.isApproved = :isApproved', { isApproved: true })
+      .groupBy('review.agentId')
+      .orderBy('"averageRating"', 'DESC')
+      .limit(limit)
+      .getRawMany();
+
+    return Promise.all(topAgents.map(async (item) => {
+        const agentId = parseInt(item.agentId);
+        const agent = await this.usersRepository.findOne({ where: { id: agentId } });
+        
+        const summary = await this.getAgentReviewSummary(agentId);
+        return {
+            agent: agent ? { id: agent.id, name: agent.fullName, profilePhotoUrl: agent.profilePhotoUrl } : null,
+            ...summary
+        };
+    }));
   }
 }
