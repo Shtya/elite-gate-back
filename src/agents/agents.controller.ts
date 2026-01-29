@@ -90,45 +90,6 @@ export class AgentsController {
   }
 
 
-  @Get()
-  @Roles(UserType.ADMIN, UserType.QUALITY, UserType.AGENT)
-  async findAll(@Query() query: any) {
-    const repository = this.agentsService.agentsRepository;
-    const page = Number(query.page) || 1;
-    const limit = Number(query.limit) || 10;
-    const skip = (page - 1) * limit;
-  
-    const qb = repository.createQueryBuilder('agent')
-      .leftJoinAndSelect('agent.user', 'agent_user')
-      .leftJoinAndSelect('agent.cities', 'city') // join cities
-      .leftJoinAndSelect('agent.areas', 'area')  // join areas with a DIFFERENT alias
-      .skip(skip)
-      .take(limit)
-      .orderBy('agent.createdAt', 'DESC');
-  
-    // Filters
-    if (query.status) qb.andWhere('agent.status = :status', { status: query.status });
-    if (query.cityId) qb.andWhere('city.id = :cityId', { cityId: Number(query.cityId) });
-    if (query.areaId) qb.andWhere('area.id = :areaId', { areaId: Number(query.areaId) });
-  
-    const [records, total] = await qb.getManyAndCount();
-  
-    const recordsWithRatings = await Promise.all(records.map(async (agent) => {
-      const reviewSummary = await this.agentsService.getAgentReviewSummary(agent.user.id);
-      return {
-        ...agent,
-        reviewSummary
-      };
-    }));
-
-    return {
-      total_records: total,
-      current_page: page,
-      per_page: limit,
-      records: recordsWithRatings,
-    };
-  }
-  
   @Post('register')
     @UseInterceptors(
       FileFieldsInterceptor([
@@ -274,7 +235,8 @@ files: {
     );
   }
 
-  @Get()
+  @Get('payouts')
+  @Roles(UserType.ADMIN)
   async getPayouts(
     @Query('page') page: number = 1,
     @Query('limit') limit: number = 10,
@@ -283,9 +245,16 @@ files: {
     return this.agentsService.getPayouts(page, limit, filters);
   }
 
-  @Get('summary')
+  @Get('payouts/summary')
+  @Roles(UserType.ADMIN)
   async getPayoutSummary() {
     return this.agentsService.getPayoutSummary();
+  }
+
+  @Get()
+  @Roles(UserType.ADMIN, UserType.QUALITY)
+  async findAll(@Query() query: any) {
+    return this.agentsService.findAll(query);
   }
   @Roles(UserType.ADMIN)
   @Patch(':agentId/visit-amount')

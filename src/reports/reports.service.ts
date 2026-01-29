@@ -1,4 +1,5 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
+import { ReviewsService } from '../reviews/reviews.service';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository, Between } from 'typeorm';
 import { ReportSnapshot, ReportSnapshotType, Appointment, AgentPayment, User, Conversion, VisitorTracking, PropertyListingRequest, Property } from 'entities/global.entity';
@@ -21,7 +22,7 @@ export class ReportsService {
     private visitorTrackingRepository: Repository<VisitorTracking>,
     @InjectRepository(Property)
     private propertyRepository: Repository<Property>,
-
+    private readonly reviewsService: ReviewsService,
   ) {}
 
   async generateReport(generateReportDto: GenerateReportDto): Promise<ReportSnapshot> {
@@ -147,6 +148,7 @@ export class ReportsService {
       totalProperties,
       totalRevenue,
       visitorStats,
+      topAgents,
     ]: any = await Promise.all([
       this.usersRepository.count({ where: { createdAt: Between(start, end) } }),
       this.usersRepository.count({ where: { userType: 'agent', createdAt: Between(start, end) } } as any),
@@ -155,6 +157,7 @@ export class ReportsService {
       this.propertyRepository.count({ where: {  createdAt: Between(start, end) } }),
       this.getTotalRevenue(start, end),
       this.getVisitorStats(start, end),
+      this.reviewsService.getTopRatedAgents(5),
     ]);
 
     return {
@@ -164,6 +167,7 @@ export class ReportsService {
       propertyStats: { totalProperties },
       financialStats: { totalRevenue },
       marketingStats: visitorStats,
+      topAgents,
     };
   }
 
@@ -262,29 +266,29 @@ export class ReportsService {
   }
 
   private async getTotalRevenue(start: Date, end: Date): Promise<number> {
-    const payments = await this.paymentsRepository.find({
-      where: {
-        paidAt: Between(start, end),
-        status: 'completed',
-      },
-    }as any);
+    const { total } = await this.paymentsRepository
+      .createQueryBuilder('payment')
+      .select('SUM(payment.amount)', 'total')
+      .where('payment.paid_at BETWEEN :start AND :end', { start, end })
+      .andWhere('payment.status = :status', { status: 'completed' })
+      .getRawOne();
 
-    return payments.reduce((sum, payment) => sum + parseFloat(payment.amount.toString()), 0);
+    return parseFloat(total) || 0;
   }
 
   private async getVisitorStats(start: Date, end: Date): Promise<any> {
-    const visitors = await this.visitorTrackingRepository.find({
+    const totalVisitors = await this.visitorTrackingRepository.count({
       where: { createdAt: Between(start, end) },
     });
 
-    const conversions = await this.conversionsRepository.find({
+    const totalConversions = await this.conversionsRepository.count({
       where: { convertedAt: Between(start, end) },
     });
 
     return {
-      totalVisitors: visitors.length,
-      totalConversions: conversions.length,
-      conversionRate: visitors.length > 0 ? (conversions.length / visitors.length * 100).toFixed(2) + '%' : '0%',
+      totalVisitors,
+      totalConversions,
+      conversionRate: totalVisitors > 0 ? (totalConversions / totalVisitors * 100).toFixed(2) + '%' : '0%',
     };
   }
 

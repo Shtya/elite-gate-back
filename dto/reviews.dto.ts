@@ -74,6 +74,34 @@ export class CreateAgentReviewDto {
   reviewText?: string;
 
   @IsOptional()
+  @IsEnum(PunctualityStatus)
+  punctuality?: PunctualityStatus;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(5)
+  accuracy?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(5)
+  professionalism?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(5)
+  trustworthiness?: number;
+
+  @IsOptional()
+  @IsNumber()
+  @Min(1)
+  @Max(10)
+  recommendation?: number;
+
+  @IsOptional()
   dimensions?: ReviewDimensionDto[];
 }
 
