@@ -30,6 +30,38 @@ export class CreateAgentDto {
 
   identityProof?: string;
   residencyDocument?: string;
+
+  @IsOptional()
+  @IsArray()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch (e) {
+        return [];
+      }
+    }
+    return value;
+  })
+  @Type(() => WorkingDayDto)
+  workingDays?: WorkingDayDto[];
+}
+
+export class WorkingTimeDto {
+  @IsString()
+  startTime: string;
+
+  @IsString()
+  endTime: string;
+}
+
+export class WorkingDayDto {
+  @IsString()
+  day: string; // e.g., 'Monday'
+
+  @IsArray()
+  @Type(() => WorkingTimeDto)
+  times: WorkingTimeDto[];
 }
 export class UpdateAgentDto {
   @IsOptional()
@@ -44,6 +76,21 @@ export class UpdateAgentDto {
 
   @IsOptional()
   residencyDocument?: string;
+
+  @IsOptional()
+  @IsArray()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch (e) {
+        return [];
+      }
+    }
+    return value;
+  })
+  @Type(() => WorkingDayDto)
+  workingDays?: WorkingDayDto[];
 @IsOptional()
   kycNotes?: string;
 

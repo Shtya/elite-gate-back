@@ -1,6 +1,6 @@
 import { Injectable, NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository } from 'typeorm';
+import { Repository, Between } from 'typeorm';
 import { CustomerReview, AgentReview, CustomerReviewDimension, AgentReviewDimension, Appointment, User, RatingDimension, NotificationType, NotificationChannel, UserType } from '../../entities/global.entity';
 import { CreateCustomerReviewDto, CreateAgentReviewDto, UpdateReviewDto, ReviewQueryDto, PunctualityStatus } from '../../dto/reviews.dto';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -326,6 +326,9 @@ export class ReviewsService {
     });
 
     console.log(`getAgentReviewSummary: found ${reviews.length} reviews for agent ${agentId}`);
+    if (reviews.length > 0) {
+      console.log('Sample review dimensions:', JSON.stringify(reviews[0].dimensions));
+    }
 
     if (reviews.length === 0) {
       return {
@@ -335,7 +338,7 @@ export class ReviewsService {
       };
     }
 
-    const totalRating = reviews.reduce((sum, review) => sum + review.rating, 0);
+    const totalRating = reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0);
     const averageRating = totalRating / reviews.length;
 
     // Calculate dimension averages
@@ -364,7 +367,7 @@ export class ReviewsService {
     });
 
     const dimensionAverages: any = {};
-    Object.keys(RatingDimension).forEach(dimension => {
+    Object.values(RatingDimension).forEach(dimension => {
       const count = dimensionCounts[dimension as RatingDimension];
       dimensionAverages[dimension] = count > 0 ? dimensionSums[dimension as RatingDimension] / count : 0;
     });
@@ -397,5 +400,65 @@ export class ReviewsService {
             ...summary
         };
     }));
+  }
+  async getGlobalReviewSummary(startDate: string, endDate: string): Promise<any> {
+    const start = new Date(startDate);
+    const end = new Date(endDate);
+
+    const reviews = await this.customerReviewRepository.find({
+      where: { 
+        isApproved: true,
+        createdAt: Between(start, end)
+      } as any, // casting to any because TypeORM types can be tricky with specific constraints, or just rely on standard FindOptions
+      relations: ['dimensions'],
+    });
+
+    if (reviews.length === 0) {
+      return {
+        averageRating: 0,
+        totalReviews: 0,
+        dimensionAverages: {},
+      };
+    }
+
+    const totalRating = reviews.reduce((sum, review) => sum + (Number(review.rating) || 0), 0);
+    const averageRating = totalRating / reviews.length;
+
+    // Calculate dimension averages
+    const dimensionSums: { [key in RatingDimension]: number } = {
+      [RatingDimension.PUNCTUALITY]: 0,
+      [RatingDimension.ACCURACY]: 0,
+      [RatingDimension.PROFESSIONALISM]: 0,
+      [RatingDimension.TRUSTWORTHINESS]: 0,
+      [RatingDimension.RECOMMENDATION]: 0,
+    };
+    const dimensionCounts: { [key in RatingDimension]: number } = {
+      [RatingDimension.PUNCTUALITY]: 0,
+      [RatingDimension.ACCURACY]: 0,
+      [RatingDimension.PROFESSIONALISM]: 0,
+      [RatingDimension.TRUSTWORTHINESS]: 0,
+      [RatingDimension.RECOMMENDATION]: 0,
+    };
+
+    reviews.forEach(review => {
+      review.dimensions.forEach(dimension => {
+        if (dimensionSums[dimension.dimension] !== undefined) {
+             dimensionSums[dimension.dimension] += dimension.score;
+             dimensionCounts[dimension.dimension]++;
+        }
+      });
+    });
+
+    const dimensionAverages: any = {};
+    Object.values(RatingDimension).forEach(dimension => {
+      const count = dimensionCounts[dimension as RatingDimension];
+      dimensionAverages[dimension] = count > 0 ? dimensionSums[dimension as RatingDimension] / count : 0;
+    });
+
+    return {
+      averageRating: Math.round(averageRating * 10) / 10,
+      totalReviews: reviews.length,
+      dimensionAverages,
+    };
   }
 }

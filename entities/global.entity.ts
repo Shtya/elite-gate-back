@@ -398,6 +398,9 @@ export class User extends CoreEntity {
 
   @Column({ type: 'timestamp', nullable: true })
   phoneOtpExpiresAt?: Date;
+
+  @OneToMany(() => WorkingDay, workingDay => workingDay.agent)
+  workingDays: WorkingDay[];
 }
 
 @Entity('cities')
@@ -1287,11 +1290,14 @@ export class Agent extends CoreEntity {
   })
   lastPayoutDate?: Date | null;
 
-  @OneToMany(() => AgentEarning, earning => earning.agent)
-  earnings: AgentEarning[];
-
   @OneToMany(() => AgentPayment, payment => payment.agent)
   payments: AgentPayment[];
+
+  @OneToMany(() => WorkingDay, workingDay => workingDay.agent)
+  workingDays: WorkingDay[];
+
+  @OneToMany(() => AgentEarning, earning => earning.agent)
+  earnings: AgentEarning[];
 
   @OneToMany(() => WalletTransaction, transaction => transaction.agent)
   walletTransactions: WalletTransaction[];
@@ -1494,6 +1500,38 @@ export class AgentAvailability extends CoreEntity {
 
   @Column({ name: 'end_time', type: 'time' })
   endTime: string;
+}
+
+@Entity('working_days')
+export class WorkingDay extends CoreEntity {
+  @ManyToOne(() => User, { eager: true })
+  @JoinColumn({ name: 'agent_id' })
+  agent: User;
+
+  @Column({ type: 'varchar', length: 20 })
+  day: string; // e.g., 'Monday'
+
+  @Column({ name: 'day_index', type: 'smallint' })
+  dayIndex: number; // 0-6
+
+  @Column({ name: 'is_enabled', type: 'boolean', default: true })
+  isEnabled: boolean;
+
+  @OneToMany(() => WorkingTime, time => time.workingDay, { cascade: true })
+  times: WorkingTime[];
+}
+
+@Entity('working_times')
+export class WorkingTime extends CoreEntity {
+  @Column({ name: 'start_time', type: 'time' })
+  startTime: string;
+
+  @Column({ name: 'end_time', type: 'time' })
+  endTime: string;
+
+  @ManyToOne(() => WorkingDay, day => day.times, { onDelete: 'CASCADE' })
+  @JoinColumn({ name: 'working_day_id' })
+  workingDay: WorkingDay;
 }
 
 @Entity('agent_preferred_properties')

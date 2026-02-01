@@ -6,10 +6,12 @@ import { Appointment, AppointmentStatusHistory, User, Property, AgentAppointment
 import { NotificationsModule } from 'src/notifications/notifications.module';
 import { AuthModule } from 'src/auth/auth.module';
 
+import { AppointmentSchedulerService } from './appointment-scheduler.service';
+
 @Module({
   imports: [TypeOrmModule.forFeature([Appointment, AppointmentStatusHistory, User, Property,AgentAppointmentRequest,Agent]) , NotificationsModule, AuthModule],
   controllers: [AppointmentsController],
-  providers: [AppointmentsService],
+  providers: [AppointmentsService, AppointmentSchedulerService],
   exports: [AppointmentsService],
 })
 export class AppointmentsModule {}
