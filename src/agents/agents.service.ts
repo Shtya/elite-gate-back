@@ -3,7 +3,7 @@ import { toWebPathFiles } from 'common/upload.config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { MoreThanOrEqual, Repository, In } from 'typeorm';
 
-import { Agent, AgentAppointmentRequest, AgentApprovalStatus, AgentBalance, AgentPayment, Appointment, AppointmentStatus, Area, City, CustomerReview, NotificationChannel, NotificationType, PaymentStatus, User, UserType, VerificationStatus, WalletTransaction, RatingDimension } from '../../entities/global.entity';
+import { Agent, AgentAppointmentRequest, AgentApprovalStatus, AgentBalance, AgentPayment, Appointment, AppointmentStatus, Area, City, CustomerReview, NotificationChannel, NotificationType, PaymentStatus, User, UserType, VerificationStatus, WalletTransaction, RatingDimension, WorkingDay, WorkingTime } from '../../entities/global.entity';
 import { CreateAgentDto, UpdateAgentDto, ApproveAgentDto, AgentQueryDto } from '../../dto/agents.dto';
 
 import { NotificationsService } from '../notifications/notifications.service';
@@ -37,9 +37,46 @@ export class AgentsService {
 
     @InjectRepository(WalletTransaction)
     private walletTransactionRepository: Repository<WalletTransaction>,
+    @InjectRepository(WorkingDay)
+    private workingDayRepository: Repository<WorkingDay>,
     private notificationsService: NotificationsService,
     private reviewsService: ReviewsService,
   ) {}
+
+  private deriveDayIndex(day: string): number {
+    const days = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+    const index = days.findIndex(d => d.toLowerCase() === day.toLowerCase());
+    return index !== -1 ? index : 0; // Default to Sunday or handle error if strict
+  }
+
+  private async saveWorkingDays(agentUser: User, workingDaysDto: any[]) {
+    if (!workingDaysDto || workingDaysDto.length === 0) return;
+
+    // Delete existing
+    const existingDays = await this.workingDayRepository.find({
+      where: { agent: { id: agentUser.id } }
+    });
+    if (existingDays.length > 0) {
+      await this.workingDayRepository.remove(existingDays);
+    }
+
+    // Create new
+    for (const dayDto of workingDaysDto) {
+      const workingDay = new WorkingDay();
+      workingDay.agent = agentUser;
+      workingDay.day = dayDto.day;
+      workingDay.dayIndex = this.deriveDayIndex(dayDto.day);
+      workingDay.isEnabled = true; // Automatic
+      workingDay.times = dayDto.times?.map(t => {
+        const time = new WorkingTime();
+        time.startTime = t.startTime;
+        time.endTime = t.endTime;
+        return time;
+      }) || [];
+      
+      await this.workingDayRepository.save(workingDay);
+    }
+  }
 
   // ... (resolveCityAndAreaSelection and create remain same)
 
@@ -232,6 +269,10 @@ export class AgentsService {
       relations: ['areas'],
     });
 
+    if (!cityIds || !Array.isArray(cityIds)) {
+      return { cities: [], areas: [] };
+    }
+
     if (cityIds.includes("all")) {
       cities = allCities;
       areas = allCities.flatMap(c => c.areas);
@@ -308,7 +349,13 @@ export class AgentsService {
       });
     }
 
-    return this.agentsRepository.save(agent);
+    const savedAgent = await this.agentsRepository.save(agent);
+
+    if (createAgentDto.workingDays) {
+      await this.saveWorkingDays(user, createAgentDto.workingDays);
+    }
+    
+    return savedAgent;
   }
 
 
@@ -342,7 +389,14 @@ export class AgentsService {
 
     Object.assign(agent, dto);
 
-    return this.agentsRepository.save(agent);
+    const savedAgent = await this.agentsRepository.save(agent);
+    
+    if (dto.workingDays) {
+      // Need to fetch user relations if not present, but agent.user is expected to be loaded by finder?
+      // findOne relations: ['user', 'cities', 'areas', 'updatedBy'] - yes user is loaded
+      await this.saveWorkingDays(agent.user, dto.workingDays);
+    }
+    return savedAgent;
   }
 
 
@@ -727,6 +781,10 @@ async registerAgent(
   agent.areas = areas;
 
   await this.agentsRepository.save(agent);
+  
+  if (registerDto.workingDays) {
+    await this.saveWorkingDays(user, registerDto.workingDays);
+  }
 
   return { message: "Agent registered successfully." };
 }

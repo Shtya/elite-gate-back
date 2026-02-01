@@ -149,6 +149,7 @@ export class ReportsService {
       totalRevenue,
       visitorStats,
       topAgents,
+      ratingSummary,
     ]: any = await Promise.all([
       this.usersRepository.count({ where: { createdAt: Between(start, end) } }),
       this.usersRepository.count({ where: { userType: 'agent', createdAt: Between(start, end) } } as any),
@@ -158,6 +159,7 @@ export class ReportsService {
       this.getTotalRevenue(start, end),
       this.getVisitorStats(start, end),
       this.reviewsService.getTopRatedAgents(5),
+      this.reviewsService.getGlobalReviewSummary(startDate, endDate),
     ]);
 
     return {
@@ -168,6 +170,7 @@ export class ReportsService {
       financialStats: { totalRevenue },
       marketingStats: visitorStats,
       topAgents,
+      ratingSummary,
     };
   }
 

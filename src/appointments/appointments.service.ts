@@ -89,8 +89,35 @@ export class AppointmentsService {
     }
    
 
+    // 4. Find Agents
+    const appointmentDayIndex = new Date(createAppointmentDto.appointmentDate).getDay(); // 0 = Sunday, 1 = Monday, etc. check system locale if needed but usually standard JS
+
+    // Helper to filter agents by schedule
+    const filterAgentsBySchedule = (agentsList: Agent[]) => {
+      return agentsList.filter(agent => {
+        // If agent has no working days defined, assume available? Or assume unavailable?
+        // Usually if feature is enabled, no days means unavailable. Let's assume unavailable if no match found.
+        if (!agent.user.workingDays || agent.user.workingDays.length === 0) return false;
+
+        const workingDay = agent.user.workingDays.find(d => 
+          d.dayIndex === appointmentDayIndex && d.isEnabled
+        );
+        
+        if (!workingDay) return false;
+
+        // Check time slots
+        // assuming startTime and endTime are "HH:MM:SS" or "HH:MM" strings
+        const hasValidTime = workingDay.times?.some(t => 
+          t.startTime <= createAppointmentDto.startTime && 
+          t.endTime >= createAppointmentDto.endTime
+        );
+
+        return hasValidTime;
+      });
+    };
+
     let agents = await agentRepo.find({
-      relations: ["cities", "areas", "user"],
+      relations: ["cities", "areas", "user", "user.workingDays", "user.workingDays.times"],
       where: { 
         status: AgentApprovalStatus.APPROVED,
         cities: { id: property.city.id },
@@ -98,18 +125,24 @@ export class AppointmentsService {
       },
     });
 
+    // Filter by schedule
+    agents = filterAgentsBySchedule(agents);
+
     if (agents.length === 0) {
-       agents = await agentRepo.find({
-        relations: ["cities", "areas", "user"],
+       // Fallback to City level
+       let cityAgents = await agentRepo.find({
+        relations: ["cities", "areas", "user", "user.workingDays", "user.workingDays.times"],
         where: { 
           status: AgentApprovalStatus.APPROVED,
           cities: { id: property.city.id },
         },
       });
+      // Filter fallback agents by schedule
+      agents = filterAgentsBySchedule(cityAgents);
     }
 
     if (agents.length === 0) {
-      throw new NotFoundException("No approved agents found for this location.");
+      throw new NotFoundException("No approved agents found for this location and time.");
     }
 
     // 5. Create the appointment (status: PENDING)
@@ -272,6 +305,10 @@ export class AppointmentsService {
         relatedId: appointment.id,
         channel: NotificationChannel.IN_APP,
       });
+
+      // Send Emails
+      await this.notificationsService.sendAppointmentConfirmationEmailToCustomer(appointment.customer, appointment, request.agent);
+      await this.notificationsService.sendAppointmentConfirmationEmailToAgent(request.agent, appointment, appointment.customer);
     }
 
     const oldStatus = appointment.status;

@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { JwtModule } from "@nestjs/jwt";
 import { TypeOrmModule } from "@nestjs/typeorm";
 import { QueryFailedErrorFilter } from "common/QueryFailedErrorFilter";
@@ -35,6 +36,7 @@ import { AppController } from "./app.controller";
   controllers: [AppController],
   imports: [
     ConfigModule.forRoot(),
+    ScheduleModule.forRoot(),
     TypeOrmModule.forRoot({
       type: "postgres",
       host: process.env.DATABASE_HOST,

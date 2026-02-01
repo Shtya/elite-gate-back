@@ -1,7 +1,7 @@
-import { IsEmail, IsEnum, IsNotEmpty, IsNumber, IsOptional,  IsString, MinLength } from 'class-validator';
+import { IsEmail, IsEnum, IsNotEmpty, IsNumber, IsOptional,  IsString, MinLength, IsArray } from 'class-validator';
 import { UserType } from '../entities/global.entity';
 import { Optional } from '@nestjs/common';
-import { Type } from 'class-transformer';
+import { Type, Transform } from 'class-transformer';
 
 export class LoginDto {
   @IsOptional()
@@ -49,6 +49,21 @@ export class RegisterDto {
 @Type(() => Number) 
 @IsNumber()
 visitAmount?:number
+
+  @IsOptional()
+  @IsArray()
+  @Transform(({ value }) => {
+    if (typeof value === 'string') {
+      try {
+        return JSON.parse(value);
+      } catch (e) {
+        return [];
+      }
+    }
+    return value;
+  })
+  workingDays?: any[]; // Using any to avoid circular dependency
+
 
 }
 
